@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoir Setup</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #252525;
+    --border: #333;
+    --text: #e0e0e0;
+    --muted: #888;
+    --accent: #7c6afb;
+    --accent-hover: #6b5ae0;
+    --success: #4caf82;
+    --warn: #e5a93a;
+    --error: #e55c5c;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .wizard {
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .logo {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  .logo-icon {
+    height: 64px;
+    width: auto;
+    border-radius: 12px;
+  }
+
+  .logo p {
+    color: var(--muted);
+    margin-top: 6px;
+    font-size: 14px;
+  }
+
+  /* step indicators */
+  .steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 32px;
+  }
+
+  .step-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-dot.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .step-dot.done {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .step-line {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    max-width: 64px;
+    transition: background 0.2s;
+  }
+
+  .step-line.done {
+    background: var(--accent);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+  }
+
+  .card h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .card .subtitle {
+    color: var(--muted);
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  .browser-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .browser-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .browser-option:hover {
+    border-color: var(--accent);
+    background: var(--surface2);
+  }
+
+  .browser-option.selected {
+    border-color: var(--accent);
+    background: rgba(124, 106, 251, 0.08);
+  }
+
+  .browser-option.unavailable {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .browser-name {
+    font-weight: 500;
+    flex: 1;
+  }
+
+  .browser-path {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: "SF Mono", "Fira Code", monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+  }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 99px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .badge-found { background: rgba(76,175,130,0.15); color: var(--success); }
+  .badge-missing { background: rgba(229,92,92,0.12); color: var(--error); }
+
+  .custom-path-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .input {
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .input:focus { border-color: var(--accent); }
+
+  .label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+
+  .label-hint {
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+
+  .field {
+    margin-bottom: 18px;
+  }
+
+  .field-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .field-row .input { flex: 1; }
+
+  .btn {
+    padding: 9px 18px;
+    border-radius: 7px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.15s, background 0.15s;
+  }
+
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover:not(:disabled) { border-color: var(--accent); }
+
+  .btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    gap: 8px;
+  }
+
+  .actions-right {
+    display: flex;
+    gap: 8px;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    min-height: 20px;
+    margin-top: 6px;
+  }
+
+  .status-ok { color: var(--success); }
+  .status-err { color: var(--error); }
+  .status-checking { color: var(--muted); }
+
+  .dot-spin {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+
+  .summary-table td {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .summary-table td:first-child {
+    color: var(--muted);
+    width: 140px;
+    font-weight: 500;
+  }
+
+  .summary-table td:last-child {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  .success-icon {
+    font-size: 48px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .step-panel { display: none; }
+  .step-panel.active { display: block; }
+
+  .alert {
+    padding: 10px 14px;
+    border-radius: 7px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .alert-info {
+    background: rgba(124, 106, 251, 0.08);
+    border: 1px solid rgba(124, 106, 251, 0.2);
+    color: #b3abf7;
+  }
+</style>
+</head>
+<body>
+<div class="wizard">
+  <div class="logo">
+    <img src="data:image/png;base64,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" class="logo-icon" alt="memoir">
+    <p>Your personal browser history search engine</p>
+  </div>
+
+  <div class="steps">
+    <div class="step-dot active" id="dot-1">1</div>
+    <div class="step-line" id="line-1-2"></div>
+    <div class="step-dot" id="dot-2">2</div>
+    <div class="step-line" id="line-2-3"></div>
+    <div class="step-dot" id="dot-3">3</div>
+    <div class="step-line" id="line-3-4"></div>
+    <div class="step-dot" id="dot-4">4</div>
+  </div>
+
+  <div class="card">
+
+    <!-- Step 1: Browser -->
+    <div class="step-panel active" id="step-1">
+      <h2>Choose your browser</h2>
+      <p class="subtitle">Memoir reads your local browser history to build a searchable index. No data leaves your machine.</p>
+      <div class="browser-list" id="browser-list">
+        <div class="status-checking"><span class="dot-spin"></span> Detecting browsers…</div>
+      </div>
+      <div class="field">
+        <label class="label">Custom path <span class="label-hint">optional — paste the path to your browser's History file</span></label>
+        <input class="input" id="custom-path" placeholder="/Users/you/Library/Application Support/…/History" />
+      </div>
+      <div class="actions">
+        <span></span>
+        <div class="actions-right">
+          <button class="btn btn-primary" id="step1-next" onclick="goStep(2)" disabled>Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2: LLM -->
+    <div class="step-panel" id="step-2">
+      <h2>Local LLM <span style="color:var(--muted);font-weight:400;font-size:14px">(optional)</span></h2>
+      <p class="subtitle">Memoir can answer questions about your history using a local language model. Leave blank to skip — you can configure this later in <code>~/.memoir/config.toml</code>.</p>
+
+      <div class="alert alert-info">
+        Supported: <strong>LM Studio</strong> (default port 1234) · <strong>Ollama</strong> (port 11434) · any OpenAI-compatible endpoint.
+      </div>
+
+      <div class="field">
+        <label class="label">Base URL</label>
+        <div class="field-row">
+          <input class="input" id="llm-url" value="http://localhost:1234" />
+          <button class="btn btn-secondary btn-sm" onclick="testLlm()" id="test-btn">Test</button>
+        </div>
+        <div class="status-row" id="llm-status"></div>
+      </div>
+
+      <div class="field">
+        <label class="label">Model name <span class="label-hint">used for the /api/ask endpoint</span></label>
+        <input class="input" id="llm-model" placeholder="e.g. lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF" />
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+        <div class="actions-right">
+          <button class="btn btn-secondary" onclick="skipLlm()">Skip</button>
+          <button class="btn btn-primary" onclick="goStep(3)">Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Data directory -->
+    <div class="step-panel" id="step-3">
+      <h2>Data directory</h2>
+      <p class="subtitle">Memoir stores its index and configuration in a directory on your machine.</p>
+
+      <div class="field">
+        <label class="label">Storage location</label>
+        <input class="input" id="data-dir" />
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+        <div class="actions-right">
+          <button class="btn btn-primary" onclick="goStep(4)">Continue →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Confirm -->
+    <div class="step-panel" id="step-4">
+      <h2>Ready to go</h2>
+      <p class="subtitle">Review your settings and finish setup.</p>
+
+      <table class="summary-table" id="summary-table"></table>
+
+      <div class="actions">
+        <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
+        <div class="actions-right">
+          <button class="btn btn-primary" id="finish-btn" onclick="finishSetup()">Finish setup</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Done -->
+    <div class="step-panel" id="step-done">
+      <div class="success-icon">✓</div>
+      <h2 style="text-align:center;margin-bottom:8px">Setup complete!</h2>
+      <p class="subtitle" style="text-align:center">Memoir is configured. Your browser history will sync in the background.</p>
+      <div class="actions" style="justify-content:center;border:none;padding-top:8px">
+        <button class="btn btn-primary" onclick="openApp()">Open Memoir →</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let selectedBrowserPath = '';
+let currentStep = 1;
+const TOTAL_STEPS = 4;
+
+function home() {
+  // Best-effort home dir from the data-dir default we'll fetch
+  return '';
+}
+
+async function init() {
+  // Set data dir default
+  const h = (await detectHome()) || '';
+  document.getElementById('data-dir').value = h ? h + '/.memoir' : '~/.memoir';
+
+  // Detect browsers
+  try {
+    const browsers = await (await fetch('/api/setup/detect')).json();
+    renderBrowserList(browsers);
+  } catch {
+    document.getElementById('browser-list').innerHTML =
+      '<p style="color:var(--muted);font-size:13px">Could not auto-detect browsers. Enter a custom path below.</p>';
+  }
+}
+
+async function detectHome() {
+  // Ask the detect endpoint; the first browser path gives us the home prefix
+  try {
+    const b = await (await fetch('/api/setup/detect')).json();
+    const p = b[0]?.path || '';
+    const match = p.match(/^(\/Users\/[^/]+)\//);
+    return match ? match[1] : '';
+  } catch { return ''; }
+}
+
+function renderBrowserList(browsers) {
+  const list = document.getElementById('browser-list');
+  if (!browsers.length) {
+    list.innerHTML = '<p style="color:var(--muted);font-size:13px">No browsers detected. Enter a custom path below.</p>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const b of browsers) {
+    const el = document.createElement('div');
+    el.className = 'browser-option' + (b.exists ? '' : ' unavailable');
+    el.dataset.path = b.path;
+    el.innerHTML = `
+      <span class="browser-name">${b.name}</span>
+      <span class="browser-path">${b.path.replace(/.*\/Application Support\//, '…/')}</span>
+      <span class="badge ${b.exists ? 'badge-found' : 'badge-missing'}">${b.exists ? 'found' : 'not found'}</span>
+    `;
+    if (b.exists) {
+      el.onclick = () => selectBrowser(el, b.path);
+      // Auto-select first found browser
+      if (!selectedBrowserPath) selectBrowser(el, b.path);
+    }
+    list.appendChild(el);
+  }
+}
+
+function selectBrowser(el, path) {
+  document.querySelectorAll('.browser-option').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedBrowserPath = path;
+  document.getElementById('step1-next').disabled = false;
+}
+
+document.getElementById('custom-path').addEventListener('input', function() {
+  if (this.value.trim()) {
+    document.querySelectorAll('.browser-option').forEach(e => e.classList.remove('selected'));
+    selectedBrowserPath = this.value.trim();
+    document.getElementById('step1-next').disabled = false;
+  }
+});
+
+function goStep(n) {
+  // Validate current before advancing
+  if (n > currentStep && !validateStep(currentStep)) return;
+
+  document.getElementById(`step-${currentStep}`).classList.remove('active');
+
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
+    const dot = document.getElementById(`dot-${i}`);
+    if (i < n) { dot.className = 'step-dot done'; dot.textContent = '✓'; }
+    else if (i === n) { dot.className = 'step-dot active'; dot.textContent = String(i); }
+    else { dot.className = 'step-dot'; dot.textContent = String(i); }
+  }
+  for (let i = 1; i < TOTAL_STEPS; i++) {
+    document.getElementById(`line-${i}-${i+1}`).className = 'step-line' + (i < n ? ' done' : '');
+  }
+
+  currentStep = n;
+  if (n === 4) buildSummary();
+
+  document.getElementById(`step-${n}`).classList.add('active');
+}
+
+function validateStep(n) {
+  if (n === 1) {
+    const custom = document.getElementById('custom-path').value.trim();
+    if (custom) selectedBrowserPath = custom;
+    if (!selectedBrowserPath) { alert('Please select or enter a browser history path.'); return false; }
+  }
+  if (n === 3) {
+    if (!document.getElementById('data-dir').value.trim()) {
+      alert('Please enter a data directory.'); return false;
+    }
+  }
+  return true;
+}
+
+function skipLlm() {
+  document.getElementById('llm-url').value = '';
+  document.getElementById('llm-model').value = '';
+  goStep(3);
+}
+
+async function testLlm() {
+  const url = document.getElementById('llm-url').value.trim();
+  if (!url) return;
+  const status = document.getElementById('llm-status');
+  const btn = document.getElementById('test-btn');
+  status.innerHTML = '<span class="dot-spin"></span> Testing…';
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/setup/test-llm?base_url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    status.innerHTML = data.ok
+      ? `<span class="status-ok">✓ ${data.message}</span>`
+      : `<span class="status-err">✗ ${data.message}</span>`;
+  } catch {
+    status.innerHTML = '<span class="status-err">✗ Request failed</span>';
+  }
+  btn.disabled = false;
+}
+
+function buildSummary() {
+  const rows = [
+    ['Browser history', selectedBrowserPath],
+    ['Data directory', document.getElementById('data-dir').value.trim()],
+    ['LLM endpoint', document.getElementById('llm-url').value.trim() || '(none)'],
+    ['Model', document.getElementById('llm-model').value.trim() || '(none)'],
+  ];
+  document.getElementById('summary-table').innerHTML = rows.map(([k, v]) =>
+    `<tr><td>${k}</td><td>${v}</td></tr>`
+  ).join('');
+}
+
+async function finishSetup() {
+  const btn = document.getElementById('finish-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const payload = {
+    browser_path: selectedBrowserPath,
+    data_dir: document.getElementById('data-dir').value.trim(),
+    llm_base_url: document.getElementById('llm-url').value.trim() || 'http://localhost:1234',
+    llm_model: document.getElementById('llm-model').value.trim() || 'local-model',
+  };
+
+  try {
+    const res = await fetch('/api/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      // Show done panel
+      document.getElementById(`step-${currentStep}`).classList.remove('active');
+      document.getElementById('step-done').classList.add('active');
+    } else {
+      alert('Failed to save configuration. Check permissions on ~/.memoir/');
+      btn.disabled = false;
+      btn.textContent = 'Finish setup';
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Finish setup';
+  }
+}
+
+function openApp() {
+  window.location.href = '/';
+}
+
+init();
+</script>
+</body>
+</html>

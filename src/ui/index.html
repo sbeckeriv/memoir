@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>memoir</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f4f6;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+header {
+  background: #fff;
+  border-bottom: 1px solid #e2e2e6;
+  padding: 0.875rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+header h1 {
+  flex-shrink: 0;
+  line-height: 0;
+}
+header h1 a { display: block; }
+.app-icon { height: 28px; width: auto; border-radius: 6px; }
+
+.header-nav {
+  font-size: 0.82rem;
+  color: #aaa;
+  flex-shrink: 0;
+}
+.header-nav a { color: #5b8af4; text-decoration: none; }
+.header-nav a:hover { text-decoration: underline; }
+
+.search-row {
+  display: flex;
+  flex: 1;
+  max-width: 640px;
+  gap: 0.5rem;
+}
+
+.search-row input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d0d0d8;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  background: #fafafa;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.search-row input:focus {
+  border-color: #5b8af4;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(91,138,244,0.15);
+}
+
+.btn {
+  padding: 0.5rem 0.9rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  transition: opacity 0.1s;
+}
+.btn:hover { opacity: 0.88; }
+.btn-search { background: #5b8af4; color: #fff; }
+.btn-ask    { background: #7c3aed; color: #fff; }
+
+main {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+}
+
+.card-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 0.875rem;
+}
+
+#results-section { display: none; }
+
+.spinner {
+  display: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #5b8af4;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 0.5rem 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.answer-text {
+  line-height: 1.65;
+  font-size: 0.95rem;
+  padding: 0.875rem 1rem;
+  background: #f5f0ff;
+  border-left: 3px solid #7c3aed;
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 0.875rem;
+}
+.answer-text p { margin: 0 0 0.5rem; }
+.answer-text p:last-child { margin-bottom: 0; }
+.answer-text ul, .answer-text ol { padding-left: 1.25rem; margin: 0 0 0.5rem; }
+.answer-text li { margin-bottom: 0.2rem; }
+.answer-text h1, .answer-text h2, .answer-text h3 { font-size: 1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.answer-text code { font-family: ui-monospace, monospace; font-size: 0.85em; background: rgba(124,58,237,0.08); padding: 0.1em 0.35em; border-radius: 3px; }
+.answer-text pre { background: rgba(124,58,237,0.08); padding: 0.75rem; border-radius: 6px; overflow-x: auto; margin: 0 0 0.5rem; }
+.answer-text pre code { background: none; padding: 0; }
+.answer-text a { color: #7c3aed; }
+.answer-text strong { font-weight: 600; }
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.source-list a {
+  font-size: 0.82rem;
+  color: #5b8af4;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-list a:hover { text-decoration: underline; }
+
+.result-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f0f0f3;
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.result-item:last-child { border-bottom: none; }
+.result-item .result-content { flex: 1; min-width: 0; }
+.result-item .result-content a {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: #2563eb;
+  text-decoration: none;
+}
+.result-item .result-content a:hover { text-decoration: underline; }
+.result-item .snippet {
+  margin-top: 0.25rem;
+  font-size: 0.83rem;
+  color: #555;
+  line-height: 1.5;
+}
+.result-item .snippet b { color: #111; font-weight: 600; }
+.result-item .visit-dates {
+  margin-top: 0.25rem;
+  font-size: 0.76rem;
+  color: #aaa;
+  display: flex;
+  gap: 0.75rem;
+}
+.result-actions {
+  display: flex;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+}
+.icon-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0.2rem 0.35rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  line-height: 1;
+  color: #bbb;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.icon-btn:hover { background: #f0f0f4; border-color: #d8d8e0; color: #555; }
+.icon-btn.starred { color: #f59e0b; }
+.icon-btn.del:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 640px) { .home-grid { grid-template-columns: 1fr; } }
+
+.site-list { display: flex; flex-direction: column; }
+#recent-list { max-height: 220px; overflow-y: auto; }
+
+.site-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f0f0f3;
+  gap: 0.5rem;
+}
+.site-item:last-child { border-bottom: none; }
+.site-item a {
+  font-size: 0.88rem;
+  color: #1a1a1a;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.site-item a:hover { color: #2563eb; }
+.badge {
+  font-size: 0.75rem;
+  color: #aaa;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.empty { color: #aaa; font-size: 0.88rem; font-style: italic; }
+
+.stats-bar {
+  background: #fff;
+  border-bottom: 1px solid #e2e2e6;
+  padding: 0.3rem 1.5rem;
+  font-size: 0.76rem;
+  color: #aaa;
+  letter-spacing: 0.01em;
+  display: none;
+}
+
+.favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+/* Clusters */
+.cluster-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.cluster-row {
+  border: 1px solid #e8e8ec;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cluster-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+  user-select: none;
+  background: #fafafa;
+  transition: background 0.1s;
+}
+.cluster-header:hover { background: #f3f3f7; }
+
+.cluster-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cluster-score {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.score-high  { background: #dcfce7; color: #15803d; }
+.score-mid   { background: #fef9c3; color: #a16207; }
+.score-low   { background: #f1f5f9; color: #64748b; }
+
+.cluster-meta {
+  font-size: 0.76rem;
+  color: #888;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cluster-toggle {
+  font-size: 0.72rem;
+  color: #bbb;
+  flex-shrink: 0;
+}
+
+.cluster-body {
+  display: none;
+  padding: 0.6rem 0.9rem 0.75rem;
+  border-top: 1px solid #ebebef;
+  background: #fff;
+}
+.cluster-row.open .cluster-body { display: block; }
+.cluster-row.open .cluster-toggle { transform: rotate(180deg); }
+
+.cluster-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.domain-pill {
+  font-size: 0.72rem;
+  background: #f0f0f5;
+  color: #555;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+}
+
+.cluster-pages { display: flex; flex-direction: column; gap: 0.35rem; }
+
+.cluster-page-link {
+  font-size: 0.85rem;
+  color: #2563eb;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+.cluster-page-link:hover { text-decoration: underline; }
+
+.cluster-show-more {
+  font-size: 0.78rem;
+  color: #5b8af4;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0.2rem 0;
+  text-align: left;
+  margin-top: 0.25rem;
+}
+.cluster-show-more:hover { text-decoration: underline; }
+
+.cluster-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #f0f0f3;
+}
+
+.cluster-action-btn {
+  font-size: 0.76rem;
+  background: none;
+  border: 1px solid #e0e0e8;
+  border-radius: 5px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  color: #666;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.cluster-action-btn:hover { background: #f5f5f8; border-color: #c8c8d4; color: #333; }
+.cluster-action-btn.danger:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+
+.clusters-footer {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: #aaa;
+}
+.clusters-footer button {
+  background: none;
+  border: none;
+  color: #5b8af4;
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0;
+}
+.clusters-footer button:hover { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="/api/custom-css">
+</head>
+<body class="page-home">
+<header>
+  <h1><a href="/"><img src="data:image/png;base64,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" class="app-icon" alt="memoir"></a></h1>
+  <div class="search-row">
+    <input id="q" type="text" placeholder="search your history… (end with ? to also ask)" autocomplete="off">
+    <button class="btn btn-search" id="btn-search">Search</button>
+  </div>
+  <span class="header-nav"><a href="/manage">Manage</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
+</header>
+<div id="stats-bar" class="stats-bar"></div>
+
+<main>
+  <div id="results-section" class="card">
+    <div class="card-title" id="results-label">Search Results</div>
+    <div class="search-row" style="margin-bottom:0.5rem">
+      <input id="ask-q" type="text" placeholder="ask a question about these results…" autocomplete="off">
+      <button class="btn btn-ask" id="btn-ask">Ask</button>
+    </div>
+    <div class="spinner" id="ask-spinner"></div>
+    <div id="ask-body"></div>
+    <div class="spinner" id="spinner"></div>
+    <div id="results-body"></div>
+  </div>
+
+  <div class="home-grid">
+    <div class="card">
+      <div class="card-title">Starred</div>
+      <div class="site-list" id="starred-list"><span class="empty">Nothing starred yet — star pages in <a href="/manage">Manage</a>.</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent</div>
+      <div class="site-list" id="recent-list"><span class="empty">Loading…</span></div>
+    </div>
+  </div>
+
+  <div class="card" id="clusters-section" style="display:none">
+    <div class="card-title">Sessions</div>
+    <div class="cluster-list" id="cluster-list"></div>
+    <div class="clusters-footer" id="clusters-footer" style="display:none">
+      <button onclick="showHiddenClusters()"></button>
+    </div>
+  </div>
+</main>
+
+<script>
+const qInput = document.getElementById('q');
+const askInput = document.getElementById('ask-q');
+
+document.getElementById('btn-search').addEventListener('click', () => doSearch());
+document.getElementById('btn-ask').addEventListener('click', () => doAsk());
+qInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+askInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAsk(); });
+qInput.focus();
+
+let _liveTimer = null;
+qInput.addEventListener('input', () => {
+  clearTimeout(_liveTimer);
+  const raw = qInput.value.trim();
+  if (!raw) {
+    document.getElementById('results-section').style.display = 'none';
+    return;
+  }
+  _liveTimer = setTimeout(() => doSearch(true), 300);
+});
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  try {
+    return new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch { return s; }
+}
+
+function showResults(label) {
+  document.getElementById('results-section').style.display = 'block';
+  document.getElementById('results-label').textContent = label;
+  document.getElementById('results-body').innerHTML = '';
+  document.getElementById('spinner').style.display = 'block';
+  document.getElementById('ask-body').innerHTML = '';
+  document.getElementById('ask-spinner').style.display = 'none';
+}
+
+function hideSpinner() {
+  document.getElementById('spinner').style.display = 'none';
+}
+
+function setBody(html) {
+  document.getElementById('results-body').innerHTML = html;
+}
+
+function showAskSpinner() {
+  document.getElementById('ask-spinner').style.display = 'block';
+  document.getElementById('ask-body').innerHTML = '';
+}
+
+function hideAskSpinner() {
+  document.getElementById('ask-spinner').style.display = 'none';
+}
+
+function setAskBody(html) {
+  document.getElementById('ask-body').innerHTML = html;
+}
+
+function renderSearchItems(items) {
+  if (!items.length) { setBody('<span class="empty">No results found.</span>'); return; }
+  setBody(items.map(i => {
+    const dates = [];
+    if (i.first_visit_at) dates.push(`first visited ${fmtDate(i.first_visit_at)}`);
+    if (i.last_visit_at)  dates.push(`last visited ${fmtDate(i.last_visit_at)}`);
+    const datesHtml = dates.length
+      ? `<div class="visit-dates">${dates.map(esc).join('<span>·</span>')}</div>`
+      : '';
+    const starClass = i.starred ? 'starred' : '';
+    const starChar = i.starred ? '★' : '☆';
+    return `<div class="result-item" data-url="${esc(i.url)}" data-starred="${!!i.starred}">
+      <div class="result-content">
+        <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title || i.url)}</a>
+        <div class="snippet">${i.snippet || ''}</div>
+        ${datesHtml}
+      </div>
+      <div class="result-actions">
+        <button class="icon-btn ${starClass}" title="${i.starred ? 'Unstar' : 'Star'}" onclick="toggleResultStar(this)">${starChar}</button>
+        <button class="icon-btn del" title="Delete from index" onclick="deleteResult(this)">🗑</button>
+      </div>
+    </div>`;
+  }).join(''));
+}
+
+function renderAskResult(data) {
+  const sourcesHtml = (data.sources || []).length
+    ? `<div class="card-title" style="margin-top:0.875rem">Sources</div>
+       <div class="source-list">${data.sources.map(u =>
+         `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`
+       ).join('')}</div>`
+    : '';
+  setAskBody(`<div class="answer-text">${data.answer}</div>${sourcesHtml}`);
+}
+
+function visibleSources() {
+  return [...document.querySelectorAll('#results-body .result-item[data-url]')].map(el => ({
+    url: el.dataset.url,
+    title: el.querySelector('a')?.textContent || el.dataset.url,
+  }));
+}
+
+async function askWithSources(q, sources) {
+  showAskSpinner();
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q, sources }),
+    });
+    const data = await r.json();
+    hideAskSpinner();
+    renderAskResult(data);
+  } catch {
+    hideAskSpinner();
+    setAskBody('<span class="empty">Ask failed.</span>');
+  }
+}
+
+async function doSearch(fromLive) {
+  const raw = qInput.value.trim();
+  if (!raw) return;
+  const isQuestion = !fromLive && raw.endsWith('?');
+  const q = isQuestion ? raw.slice(0, -1).trim() : raw;
+  if (!q) return;
+  askInput.value = q;
+  showResults('Search Results');
+  try {
+    const r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&limit=20');
+    const items = await r.json();
+    hideSpinner();
+    renderSearchItems(items);
+  } catch {
+    hideSpinner();
+    setBody('<span class="empty">Search failed.</span>');
+    return;
+  }
+  if (isQuestion) {
+    askWithSources(q, visibleSources());
+  }
+}
+
+async function doAsk() {
+  const q = askInput.value.trim();
+  if (!q) return;
+  askWithSources(q, visibleSources());
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch { return ''; }
+}
+
+async function toggleResultStar(btn) {
+  const row = btn.closest('.result-item');
+  const url = row.dataset.url;
+  const nowStarred = row.dataset.starred !== 'true';
+  await fetch(`/api/star?url=${encodeURIComponent(url)}&starred=${nowStarred}`, { method: 'POST' });
+  row.dataset.starred = nowStarred;
+  btn.textContent = nowStarred ? '★' : '☆';
+  btn.classList.toggle('starred', nowStarred);
+  btn.title = nowStarred ? 'Unstar' : 'Star';
+}
+
+async function deleteResult(btn) {
+  const row = btn.closest('.result-item');
+  const url = row.dataset.url;
+  if (!confirm(`Delete from index?\n\n${url}`)) return;
+  const r = await fetch(`/api/page?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
+  if (r.ok || r.status === 204) { row.remove(); }
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    const bar = document.getElementById('stats-bar');
+    bar.textContent =
+      `${s.total_pages.toLocaleString()} tracked · ${s.fetched.toLocaleString()} indexed · ${s.embedded.toLocaleString()} embedded · ${s.pending.toLocaleString()} pending`;
+    bar.style.display = 'block';
+    return s.fetched;
+  } catch { return null; }
+}
+
+async function loadList(url, listId, renderFn) {
+  const el = document.getElementById(listId);
+  try {
+    const r = await fetch(url);
+    const items = await r.json();
+    if (!items.length) { el.innerHTML = '<span class="empty">Nothing yet.</span>'; return; }
+    el.innerHTML = items.map(renderFn).join('');
+  } catch {
+    el.innerHTML = '<span class="empty">Could not load.</span>';
+  }
+}
+
+function renderSiteItem(i) {
+  const h = hostOf(i.url);
+  const img = h ? `<img class="favicon" src="/api/favicon?host=${esc(h)}" alt="" onerror="this.style.display='none'" loading="lazy">` : '';
+  return `<div class="site-item">
+    ${img}
+    <a href="${esc(i.url)}" target="_blank" rel="noopener" title="${esc(i.url)}">${esc(i.title || i.url)}</a>
+  </div>`;
+}
+
+function loadRecent() { loadList('/api/recent?limit=5', 'recent-list', renderSiteItem); }
+function loadStarred() { loadList('/api/starred?limit=20', 'starred-list', renderSiteItem); }
+
+loadRecent();
+loadStarred();
+
+let _pollFetched = null;
+let _pollTimer = null;
+
+async function startPolling() {
+  let pollSecs = 30;
+  try {
+    const r = await fetch('/api/settings');
+    const s = await r.json();
+    const v = s.application?.ui_poll_secs;
+    if (typeof v === 'number') pollSecs = v;
+  } catch {}
+  _pollFetched = await loadStats();
+  if (pollSecs <= 0) return;
+  _pollTimer = setInterval(async () => {
+    const fetched = await loadStats();
+    if (fetched !== null && _pollFetched !== null && fetched !== _pollFetched) {
+      _pollFetched = fetched;
+      loadRecent();
+      loadStarred();
+      loadClusters();
+    } else if (fetched !== null) {
+      _pollFetched = fetched;
+    }
+  }, pollSecs * 1000);
+}
+startPolling();
+
+const DISMISSED_KEY = 'memoir_dismissed_clusters';
+
+function getDismissed() {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function saveDismissed(set) {
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
+}
+
+function clusterFingerprint(c) {
+  return c.started_at + '|' + (c.pages[0] ? c.pages[0].url : '');
+}
+
+let _allClusters = [];
+
+async function loadClusters() {
+  try {
+    const r = await fetch('/api/clusters?days=14');
+    _allClusters = await r.json();
+    if (!_allClusters.length) return;
+    renderClusters();
+  } catch {}
+}
+loadClusters();
+
+function renderClusters() {
+  const dismissed = getDismissed();
+  const visible = _allClusters.filter(c => !dismissed.has(clusterFingerprint(c)));
+  const hiddenCount = _allClusters.length - visible.length;
+
+  if (!visible.length && !hiddenCount) return;
+
+  const section = document.getElementById('clusters-section');
+  const list = document.getElementById('cluster-list');
+  const footer = document.getElementById('clusters-footer');
+  section.style.display = 'block';
+  list.innerHTML = visible.map(renderCluster).join('');
+
+  if (hiddenCount > 0) {
+    footer.style.display = 'block';
+    footer.querySelector('button').textContent = `Show ${hiddenCount} hidden session${hiddenCount > 1 ? 's' : ''}`;
+  } else {
+    footer.style.display = 'none';
+  }
+}
+
+function showHiddenClusters() {
+  saveDismissed(new Set());
+  renderClusters();
+}
+
+function fmtSession(startedAt, durationMins) {
+  const d = new Date(startedAt);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  let dayStr;
+  if (diffDays === 0) dayStr = 'Today';
+  else if (diffDays === 1) dayStr = 'Yesterday';
+  else dayStr = `${diffDays}d ago`;
+  const dur = durationMins < 2 ? '' : durationMins < 60
+    ? ` · ${durationMins}m`
+    : ` · ${Math.round(durationMins / 60)}h`;
+  return `${dayStr} ${timeStr}${dur}`;
+}
+
+function scoreClass(score) {
+  if (score >= 0.65) return 'score-high';
+  if (score >= 0.45) return 'score-mid';
+  return 'score-low';
+}
+
+function renderCluster(c) {
+  const fp = esc(clusterFingerprint(c));
+  const scorePct = Math.round(c.score * 100);
+  const meta = fmtSession(c.started_at, c.duration_mins);
+  const domains = (c.domains || [])
+    .map(d => `<span class="domain-pill">${esc(d)}</span>`).join('');
+  const PREVIEW = 4;
+  const pages = c.pages || [];
+  const previewPages = pages.slice(0, PREVIEW);
+  const extra = pages.length - PREVIEW;
+  const pageLinks = previewPages.map(p =>
+    `<a class="cluster-page-link" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title || p.url)}</a>`
+  ).join('');
+  const showMore = extra > 0
+    ? `<button class="cluster-show-more" onclick="expandClusterPages(this, ${JSON.stringify(pages.slice(PREVIEW).map(p => ({url:p.url, title:p.title})))})">+ ${extra} more pages</button>`
+    : '';
+  return `<div class="cluster-row" data-fp="${fp}">
+    <div class="cluster-header" onclick="this.closest('.cluster-row').classList.toggle('open')">
+      <span class="cluster-label">${esc(c.label)}</span>
+      <span class="cluster-score ${scoreClass(c.score)}">${scorePct}%</span>
+      <span class="cluster-meta">${esc(meta)}</span>
+      <span class="cluster-toggle">▾</span>
+      <button class="icon-btn" title="Dismiss this session"
+        onclick="event.stopPropagation(); dismissCluster('${fp}')">✕</button>
+    </div>
+    <div class="cluster-body">
+      <div class="cluster-domains">${domains}</div>
+      <div class="cluster-pages">
+        ${pageLinks}
+        ${showMore}
+      </div>
+      <div class="cluster-actions">
+        <button class="cluster-action-btn danger"
+          onclick="hideTopic('${esc(c.dominant_domain)}', this)">
+          Hide all "${esc(c.dominant_domain)}" sessions
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function dismissCluster(fp) {
+  const dismissed = getDismissed();
+  dismissed.add(fp);
+  saveDismissed(dismissed);
+  renderClusters();
+}
+
+async function hideTopic(domain, btn) {
+  if (!confirm(`Hide all future sessions dominated by ${domain}?\n\nYou can undo this in Manage.`)) return;
+  btn.disabled = true;
+  btn.textContent = 'Hiding…';
+  await fetch(`/api/clusters/ignore?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
+  // reload from server so the ignored domain is fully filtered
+  const r = await fetch('/api/clusters?days=14');
+  _allClusters = await r.json();
+  renderClusters();
+}
+
+function expandClusterPages(btn, extraPages) {
+  const container = btn.closest('.cluster-pages');
+  extraPages.forEach(p => {
+    const a = document.createElement('a');
+    a.className = 'cluster-page-link';
+    a.href = p.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = p.title || p.url;
+    container.insertBefore(a, btn);
+  });
+  btn.remove();
+}
+</script>
+</body>
+</html>

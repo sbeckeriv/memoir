@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.2.0)"
+        required: true
+        type: string
+      draft:
+        description: "Create as draft release"
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  release-macos:
+    name: Build macOS universal binary
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            src-tauri -> src-tauri/target
+
+      - name: Install Node (required by Tauri CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build universal macOS app
+        run: cargo tauri build --target universal-apple-darwin
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+
+      - name: Locate DMG artifact
+        id: dmg
+        run: |
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename $DMG)" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: memoir ${{ github.event.inputs.tag }}
+          draft: ${{ github.event.inputs.draft }}
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            1. Download **${{ steps.dmg.outputs.name }}** below
+            2. Open the DMG and drag **Memoir.app** to your Applications folder
+            3. **First launch:** right-click the app and choose **Open**
+               macOS blocks unsigned apps on double-click. Right-click → Open bypasses Gatekeeper.
+               Alternatively: `xattr -dr com.apple.quarantine /Applications/Memoir.app`
+            4. After the first open, you can launch it normally from Spotlight or the Applications folder
+
+            ---
+
+            **Universal binary** — runs natively on both Apple Silicon (M1/M2/M3) and Intel Macs.
+          files: ${{ steps.dmg.outputs.path }}

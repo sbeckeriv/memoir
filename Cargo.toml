@@ -1,0 +1,38 @@
+[workspace]
+members = [".", "src-tauri"]
+resolver = "2"
+
+[package]
+name = "memoir"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "memoir"
+path = "src/lib.rs"
+
+[[bin]]
+name = "memoir"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+axum = "0.8"
+tower-http = { version = "0.6", features = ["cors"] }
+chrono = { version = "0.4", features = ["serde"] }
+fastembed = "5"
+reqwest = { version = "0.12", features = ["json"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+scraper = "0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+plist = "1"
+thiserror = "2"
+toml = "0.8"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3"
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
+
+[dev-dependencies]

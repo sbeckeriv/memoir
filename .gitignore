@@ -1,0 +1,14 @@
+/target
+src-tauri/target
+.DS_Store
+*.db
+*.db-wal
+*.db-shm
+*.swp
+*.swo
+config.toml
+.env
+.fastembed_cache/
+.claude/
+CLAUDE.md
+search.md

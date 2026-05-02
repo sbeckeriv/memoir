@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>memoir · manage</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f4f6;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+header {
+  background: #fff;
+  border-bottom: 1px solid #e2e2e6;
+  padding: 0.875rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+header h1 {
+  flex-shrink: 0;
+  line-height: 0;
+}
+header h1 a { display: block; }
+.app-icon { height: 28px; width: auto; border-radius: 6px; }
+
+header a { color: inherit; text-decoration: none; }
+header a:hover { text-decoration: underline; }
+
+.header-nav { font-size: 0.85rem; color: #888; }
+.header-nav a { color: #5b8af4; text-decoration: none; }
+.header-nav a:hover { text-decoration: underline; }
+
+.filter-row {
+  display: flex;
+  flex: 1;
+  max-width: 480px;
+  gap: 0.5rem;
+}
+
+.filter-row input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d0d0d8;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  background: #fafafa;
+  transition: border-color 0.15s;
+}
+.filter-row input:focus { border-color: #5b8af4; background: #fff; }
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-info {
+  font-size: 0.82rem;
+  color: #888;
+  margin-left: auto;
+}
+
+.btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: opacity 0.1s;
+  flex-shrink: 0;
+}
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-prev, .btn-next, .btn-export-stars, .btn-import-stars { background: #e8e8ee; color: #333; }
+
+.status-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.tab {
+  padding: 0.3rem 0.7rem;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #e8e8ee;
+  color: #555;
+  border: none;
+}
+.tab.active { background: #5b8af4; color: #fff; }
+.tab:hover:not(.active) { background: #d8d8e0; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  overflow: hidden;
+  font-size: 0.875rem;
+}
+
+thead th {
+  text-align: left;
+  padding: 0.65rem 0.875rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #888;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8ee;
+}
+
+tbody tr {
+  border-bottom: 1px solid #f0f0f3;
+  transition: background 0.1s;
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #f8f8fb; }
+
+td {
+  padding: 0.55rem 0.875rem;
+  vertical-align: middle;
+}
+
+.col-fav { width: 28px; }
+.col-title { max-width: 280px; }
+.col-url { max-width: 320px; }
+.col-status { width: 90px; }
+.col-actions { width: 130px; white-space: nowrap; }
+
+.title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.page-title {
+  font-weight: 500;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.page-url {
+  font-size: 0.76rem;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
+}
+
+.page-title a, .page-url a {
+  color: inherit;
+  text-decoration: none;
+}
+.page-title a:hover { color: #2563eb; text-decoration: underline; }
+.page-url a:hover { color: #555; text-decoration: underline; }
+
+.favicon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-fetched   { background: #d1fae5; color: #065f46; }
+.badge-pending   { background: #e0e7ff; color: #3730a3; }
+.badge-auth_wall { background: #fef3c7; color: #92400e; }
+.badge-error     { background: #fee2e2; color: #991b1b; }
+.badge-skip      { background: #f3f4f6; color: #6b7280; }
+
+.actions {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.icon-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: background 0.1s, border-color 0.1s;
+  color: #666;
+}
+.icon-btn:hover { background: #f0f0f4; border-color: #d8d8e0; color: #1a1a1a; }
+.icon-btn.starred { color: #f59e0b; }
+.icon-btn.del:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.icon-btn.ban-host:hover { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+
+.empty { color: #aaa; font-size: 0.88rem; font-style: italic; padding: 1.5rem 0.875rem; }
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 0.65rem 1.1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 100;
+}
+.toast.show { opacity: 1; }
+
+.sync-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid #e2e2e6;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sync-dot.active  { background: #22c55e; }
+.sync-dot.paused  { background: #f59e0b; }
+
+#sync-label { font-weight: 600; color: #1a1a1a; }
+#sync-interval-text { color: #888; }
+
+.sync-actions { display: flex; gap: 0.5rem; }
+.btn-pause  { background: #e8e8ee; color: #333; }
+.btn-sync   { background: #5b8af4; color: #fff; }
+</style>
+<link rel="stylesheet" href="/api/custom-css">
+</head>
+<body class="page-manage">
+<header>
+  <h1><a href="/"><img src="data:image/png;base64,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" class="app-icon" alt="memoir"></a></h1>
+  <span class="header-nav"><a href="/">&#8592; back to search</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
+  <div class="filter-row">
+    <input id="filter" type="text" placeholder="filter by title or URL…" autocomplete="off">
+  </div>
+</header>
+
+<main>
+  <div class="sync-card">
+    <div class="sync-status">
+      <span id="sync-dot" class="sync-dot active"></span>
+      <span id="sync-label">Auto-sync active</span>
+      <span id="sync-interval-text"></span>
+    </div>
+    <div class="sync-actions">
+      <button class="btn btn-pause" id="btn-pause-sync">Pause Sync</button>
+      <button class="btn btn-sync" id="btn-sync-now">Sync Now</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="status-tabs">
+      <button class="tab active" data-status="">All</button>
+      <button class="tab" data-status="fetched">Indexed</button>
+      <button class="tab" data-status="pending">Pending</button>
+      <button class="tab" data-status="auth_wall">Auth wall</button>
+      <button class="tab" data-status="error">Error</button>
+      <button class="tab" data-status="skip">Skipped</button>
+    </div>
+    <span class="toolbar-info" id="toolbar-info"></span>
+    <button class="btn btn-export-stars" id="btn-export-stars">Export Stars</button>
+    <input type="file" id="import-file" accept=".json" style="display:none">
+    <button class="btn btn-import-stars" id="btn-import-stars">Import Stars</button>
+    <button class="btn btn-prev" id="btn-prev" disabled>&#8592; Prev</button>
+    <button class="btn btn-next" id="btn-next" disabled>Next &#8594;</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="col-fav"></th>
+        <th class="col-title">Page</th>
+        <th class="col-status">Status</th>
+        <th class="col-actions">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="page-list">
+      <tr><td colspan="4" class="empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LIMIT = 50;
+let offset = 0;
+let currentFilter = '';
+let currentStatus = '';
+let filterTimer = null;
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch { return ''; }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function statusBadge(s) {
+  return `<span class="badge badge-${esc(s)}">${esc(s)}</span>`;
+}
+
+async function load() {
+  const tbody = document.getElementById('page-list');
+  tbody.innerHTML = '<tr><td colspan="4" class="empty">Loading…</td></tr>';
+
+  let url = `/api/pages?limit=${LIMIT + 1}&offset=${offset}`;
+  if (currentFilter) url += '&q=' + encodeURIComponent(currentFilter);
+
+  try {
+    const r = await fetch(url);
+    let items = await r.json();
+
+    // client-side status filter (server returns all statuses)
+    if (currentStatus) items = items.filter(i => i.fetch_status === currentStatus);
+
+    const hasMore = items.length > LIMIT;
+    const page = items.slice(0, LIMIT);
+
+    document.getElementById('btn-prev').disabled = offset === 0;
+    document.getElementById('btn-next').disabled = !hasMore;
+    document.getElementById('toolbar-info').textContent =
+      page.length ? `Showing ${offset + 1}–${offset + page.length}` : '';
+
+    if (!page.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Nothing here.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = page.map(item => {
+      const h = hostOf(item.url);
+      const img = h
+        ? `<img class="favicon" src="/api/favicon?host=${esc(h)}" alt="" onerror="this.style.display='none'" loading="lazy">`
+        : '';
+      const star = item.starred ? '★' : '☆';
+      const starClass = item.starred ? 'starred' : '';
+      return `<tr data-url="${esc(item.url)}" data-host="${esc(h)}" data-starred="${item.starred}">
+        <td class="col-fav">${img}</td>
+        <td class="col-title">
+          <div class="title-cell">
+            <div class="page-title"><a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.title || item.url)}</a></div>
+            <div class="page-url"><a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.url)}</a></div>
+          </div>
+        </td>
+        <td class="col-status">${statusBadge(item.fetch_status)}</td>
+        <td class="col-actions">
+          <div class="actions">
+            <button class="icon-btn ${starClass}" title="${item.starred ? 'Unstar' : 'Star'}" onclick="toggleStar(this)">${star}</button>
+            <button class="icon-btn del" title="Delete this URL" onclick="deletePage(this)">🗑</button>
+            <button class="icon-btn ban-host" title="Ban host &amp; delete all its pages" onclick="banHost(this)">🚫 ${esc(h)}</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">Failed to load.</td></tr>';
+  }
+}
+
+async function toggleStar(btn) {
+  const row = btn.closest('tr');
+  const url = row.dataset.url;
+  const nowStarred = row.dataset.starred === 'true' ? false : true;
+  await fetch(`/api/star?url=${encodeURIComponent(url)}&starred=${nowStarred}`, { method: 'POST' });
+  row.dataset.starred = nowStarred;
+  btn.textContent = nowStarred ? '★' : '☆';
+  btn.classList.toggle('starred', nowStarred);
+  btn.title = nowStarred ? 'Unstar' : 'Star';
+  showToast(nowStarred ? 'Starred' : 'Unstarred');
+}
+
+async function deletePage(btn) {
+  const row = btn.closest('tr');
+  const url = row.dataset.url;
+  if (!confirm(`Delete this page from the index?\n\n${url}`)) return;
+  const r = await fetch(`/api/page?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
+  if (r.ok || r.status === 204) {
+    row.remove();
+    showToast('Page deleted');
+  } else {
+    showToast('Delete failed');
+  }
+}
+
+async function banHost(btn) {
+  const row = btn.closest('tr');
+  const host = row.dataset.host;
+  if (!confirm(`Ban "${host}" and delete ALL its indexed pages?`)) return;
+  const r = await fetch(`/api/ban?host=${encodeURIComponent(host)}`, { method: 'POST' });
+  if (r.ok) {
+    const data = await r.json();
+    // Remove all rows for this host
+    document.querySelectorAll(`tr[data-host="${CSS.escape(host)}"]`).forEach(r => r.remove());
+    showToast(`Banned ${host} · ${data.deleted} pages removed`);
+  } else {
+    showToast('Ban failed');
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentStatus = tab.dataset.status;
+    offset = 0;
+    load();
+  });
+});
+
+document.getElementById('filter').addEventListener('input', e => {
+  clearTimeout(filterTimer);
+  filterTimer = setTimeout(() => {
+    currentFilter = e.target.value.trim();
+    offset = 0;
+    load();
+  }, 300);
+});
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  offset = Math.max(0, offset - LIMIT);
+  load();
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  offset += LIMIT;
+  load();
+});
+
+async function loadSyncStatus() {
+  try {
+    const r = await fetch('/api/sync/status');
+    const data = await r.json();
+    const dot = document.getElementById('sync-dot');
+    dot.className = 'sync-dot ' + (data.paused ? 'paused' : 'active');
+    document.getElementById('sync-label').textContent = data.paused ? 'Sync paused' : 'Auto-sync active';
+    document.getElementById('sync-interval-text').textContent = `· every ${data.interval_mins} min`;
+    document.getElementById('btn-pause-sync').textContent = data.paused ? 'Resume Sync' : 'Pause Sync';
+  } catch (_) {}
+}
+
+document.getElementById('btn-pause-sync').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-pause-sync');
+  const pausing = btn.textContent === 'Pause Sync';
+  await fetch(`/api/sync/pause?paused=${pausing}`, { method: 'POST' });
+  await loadSyncStatus();
+});
+
+document.getElementById('btn-sync-now').addEventListener('click', async () => {
+  await fetch('/api/sync', { method: 'POST' });
+  showToast('Sync started');
+});
+
+document.getElementById('btn-export-stars').addEventListener('click', () => {
+  window.location.href = '/api/export/starred';
+});
+
+document.getElementById('btn-import-stars').addEventListener('click', () => {
+  document.getElementById('import-file').click();
+});
+
+document.getElementById('import-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const items = JSON.parse(text);
+    const r = await fetch('/api/import/starred', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(items),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      showToast(`Imported ${data.imported} starred pages`);
+      load();
+    } else {
+      showToast('Import failed');
+    }
+  } catch (_) {
+    showToast('Import failed: invalid file');
+  }
+  e.target.value = '';
+});
+
+load();
+loadSyncStatus();
+</script>
+</body>
+</html>

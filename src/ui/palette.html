@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: transparent;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+#palette {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: rgb(28, 28, 30);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 16px 70px rgba(0,0,0,0.75);
+  overflow: hidden;
+}
+#search-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 18px;
+  height: 58px;
+  flex-shrink: 0;
+}
+#query {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 18px;
+  color: #fff;
+  caret-color: #0a84ff;
+  letter-spacing: -0.015em;
+}
+#query::placeholder { color: rgba(255,255,255,0.28); }
+#results-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  flex-shrink: 0;
+  display: none;
+}
+#result-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px;
+  cursor: pointer;
+}
+.result-row.is-selected { background: rgba(10,132,255,0.28); }
+.result-row:hover:not(.is-selected) { background: rgba(255,255,255,0.06); }
+.favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0.85;
+  background: rgba(255,255,255,0.04);
+}
+.result-text { flex: 1; min-width: 0; }
+.result-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+}
+.result-subtitle {
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+#palette-footer {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  height: 34px;
+  color: rgba(255,255,255,0.22);
+  font-size: 10.5px;
+}
+.kbd {
+  display: inline-flex;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  margin-right: 3px;
+  color: rgba(255,255,255,0.35);
+}
+</style>
+<link rel="stylesheet" href="/api/custom-css">
+</head>
+<body class="page-palette">
+<div id="palette">
+  <div id="search-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0">
+      <circle cx="6.5" cy="6.5" r="4.5" stroke="rgba(255,255,255,0.38)" stroke-width="1.5"/>
+      <path d="M10 10L14 14" stroke="rgba(255,255,255,0.38)" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <input id="query" type="text" placeholder="Search history…" autocomplete="off" spellcheck="false">
+  </div>
+  <div id="results-divider"></div>
+  <div id="result-list"></div>
+  <div id="palette-footer">
+    <span><span class="kbd">↑↓</span>navigate</span>
+    <span><span class="kbd">↵</span>open</span>
+    <span><span class="kbd">esc</span>close</span>
+  </div>
+</div>
+<script>
+const queryEl = document.getElementById('query');
+const resultListEl = document.getElementById('result-list');
+const divider = document.getElementById('results-divider');
+let items = [], sel = -1, timer;
+
+function clearPalette() {
+  queryEl.value = '';
+  items = []; sel = -1;
+  resultListEl.innerHTML = '';
+  divider.style.display = 'none';
+  queryEl.focus();
+}
+window.clearPalette = clearPalette;
+
+queryEl.addEventListener('input', () => {
+  clearTimeout(timer);
+  const q = queryEl.value.trim();
+  if (!q) { items = []; sel = -1; resultListEl.innerHTML = ''; divider.style.display = 'none'; return; }
+  timer = setTimeout(() => search(q), 180);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { doHide(); return; }
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+  else if (e.key === 'Enter') { e.preventDefault(); pick(sel); }
+});
+
+async function search(q) {
+  try {
+    const r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&limit=7');
+    if (!r.ok) return;
+    items = await r.json();
+    sel = items.length ? 0 : -1;
+    render();
+  } catch(_) {}
+}
+
+function render() {
+  divider.style.display = items.length ? 'block' : 'none';
+  resultListEl.innerHTML = items.map((it, i) => {
+    const host = hostOf(it.url);
+    const sub = it.snippet || host;
+    return `<div class="result-row${i === sel ? ' is-selected' : ''}" onclick="pick(${i})">
+      <img class="favicon" src="/api/favicon?host=${encodeURIComponent(host)}" onerror="this.style.opacity='0'">
+      <div class="result-text">
+        <div class="result-title">${esc(it.title || it.url)}</div>
+        <div class="result-subtitle">${esc(sub)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function move(d) {
+  if (!items.length) return;
+  sel = (sel + d + items.length) % items.length;
+  render();
+  resultListEl.children[sel]?.scrollIntoView({ block: 'nearest' });
+}
+
+function pick(i) {
+  const item = items[i];
+  if (!item) return;
+  fetch('/api/open-url?url=' + encodeURIComponent(item.url)).catch(() => {});
+  doHide();
+}
+
+function doHide() {
+  fetch('/api/palette/hide', { method: 'POST' }).catch(() => {});
+}
+
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch(_) { return url; }
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+queryEl.focus();
+</script>
+</body>
+</html>
