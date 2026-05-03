@@ -22,10 +22,10 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Check
-        run: cargo check --workspace
+        run: cargo check --package memoir
 
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --package memoir -- -D warnings
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --package memoir

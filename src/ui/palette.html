@@ -87,6 +87,22 @@ html, body {
   text-overflow: ellipsis;
   margin-top: 1px;
 }
+#ask-answer {
+  display: none;
+  padding: 12px 18px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.55;
+  max-height: 220px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+#ask-answer.loading { color: rgba(255,255,255,0.35); font-style: italic; }
+#ask-answer a { color: #5b9cf6; }
+#ask-answer p { margin: 0 0 6px; }
+#ask-answer p:last-child { margin-bottom: 0; }
+#ask-answer ul, #ask-answer ol { padding-left: 1.2em; margin: 0 0 6px; }
 #palette-footer {
   flex-shrink: 0;
   border-top: 1px solid rgba(255,255,255,0.07);
@@ -118,13 +134,15 @@ html, body {
       <circle cx="6.5" cy="6.5" r="4.5" stroke="rgba(255,255,255,0.38)" stroke-width="1.5"/>
       <path d="M10 10L14 14" stroke="rgba(255,255,255,0.38)" stroke-width="1.5" stroke-linecap="round"/>
     </svg>
-    <input id="query" type="text" placeholder="Search history…" autocomplete="off" spellcheck="false">
+    <input id="query" type="text" placeholder="Search history… (end with ? to ask AI)" autocomplete="off" spellcheck="false">
   </div>
   <div id="results-divider"></div>
   <div id="result-list"></div>
+  <div id="ask-answer"></div>
   <div id="palette-footer">
     <span><span class="kbd">↑↓</span>navigate</span>
     <span><span class="kbd">↵</span>open</span>
+    <span><span class="kbd">?</span>ask AI</span>
     <span><span class="kbd">esc</span>close</span>
   </div>
 </div>
@@ -132,6 +150,7 @@ html, body {
 const queryEl = document.getElementById('query');
 const resultListEl = document.getElementById('result-list');
 const divider = document.getElementById('results-divider');
+const askAnswerEl = document.getElementById('ask-answer');
 let items = [], sel = -1, timer;
 
 function clearPalette() {
@@ -139,15 +158,27 @@ function clearPalette() {
   items = []; sel = -1;
   resultListEl.innerHTML = '';
   divider.style.display = 'none';
+  askAnswerEl.style.display = 'none';
+  askAnswerEl.innerHTML = '';
   queryEl.focus();
 }
 window.clearPalette = clearPalette;
 
 queryEl.addEventListener('input', () => {
   clearTimeout(timer);
-  const q = queryEl.value.trim();
-  if (!q) { items = []; sel = -1; resultListEl.innerHTML = ''; divider.style.display = 'none'; return; }
-  timer = setTimeout(() => search(q), 180);
+  const raw = queryEl.value.trim();
+  if (!raw) {
+    items = []; sel = -1;
+    resultListEl.innerHTML = '';
+    divider.style.display = 'none';
+    askAnswerEl.style.display = 'none';
+    askAnswerEl.innerHTML = '';
+    return;
+  }
+  const isQuestion = raw.endsWith('?');
+  const q = isQuestion ? raw.slice(0, -1).trim() : raw;
+  if (!q) return;
+  timer = setTimeout(() => searchAndMaybeAsk(q, isQuestion), 180);
 });
 
 document.addEventListener('keydown', e => {
@@ -158,14 +189,36 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Enter') { e.preventDefault(); pick(sel); }
 });
 
-async function search(q) {
+async function searchAndMaybeAsk(q, ask) {
+  askAnswerEl.style.display = 'none';
+  askAnswerEl.innerHTML = '';
   try {
     const r = await fetch('/api/search?q=' + encodeURIComponent(q) + '&limit=7');
     if (!r.ok) return;
     items = await r.json();
     sel = items.length ? 0 : -1;
     render();
-  } catch(_) {}
+  } catch(_) { return; }
+  if (ask) {
+    const sources = items.map(it => ({ url: it.url, title: it.title || it.url }));
+    askAnswerEl.className = 'loading';
+    askAnswerEl.textContent = 'Thinking…';
+    askAnswerEl.style.display = 'block';
+    try {
+      const r = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q, sources }),
+      });
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      askAnswerEl.className = '';
+      askAnswerEl.innerHTML = data.answer || '<em>No answer.</em>';
+    } catch(_) {
+      askAnswerEl.className = '';
+      askAnswerEl.textContent = 'Ask failed.';
+    }
+  }
 }
 
 function render() {

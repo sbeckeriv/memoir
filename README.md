@@ -19,8 +19,14 @@ It also embeds everything with a local ML model so you can search by meaning ("h
 Everything runs on your computer. memoir never sends your history, your queries, or your pages anywhere.
 
 ---
+Search:
+<a href="screenshots/search.png"><img src="screenshots/search.png" width="380" alt="Search results"></a> 
 
-<a href="screenshots/search.png"><img src="screenshots/search.png" width="380" alt="Search results"></a> <a href="screenshots/ask.png"><img src="screenshots/ask.png" width="380" alt="Ask answer"></a> <a href="screenshots/hotkey.png"><img src="screenshots/hotkey.png" width="380" alt="Quick-search palette"></a>
+Asked and answered:
+<a href="screenshots/ask.png"><img src="screenshots/ask.png" width="380" alt="Ask answer"></a> 
+
+Hotkey popup:
+<a href="screenshots/hotkey.png"><img src="screenshots/hotkey.png" width="380" alt="Quick-search palette"></a>
 
 ---
 
