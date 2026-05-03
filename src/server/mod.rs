@@ -109,7 +109,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/recent", get(handlers::recent))
         .route("/api/top-sites", get(handlers::top_sites))
         .route("/api/search", get(handlers::search))
-        .route("/api/ask", post(handlers::ask))
+        .route("/api/ask", get(handlers::ask_get).post(handlers::ask))
         .route("/api/stats", get(handlers::stats))
         .route("/api/favicon", get(handlers::favicon))
         .route("/api/pages", get(handlers::list_pages))

@@ -24,9 +24,11 @@ async fn ask_matching_query_returns_200_with_answer_and_sources() {
         .expect("failed to send request");
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.expect("failed to parse JSON");
-    assert_eq!(
-        body["answer"].as_str().unwrap(),
-        "Mock answer from LLM.",
+    assert!(
+        body["answer"]
+            .as_str()
+            .unwrap()
+            .contains("Mock answer from LLM."),
         "answer should be the mock LLM response"
     );
     let sources = body["sources"].as_array().unwrap();

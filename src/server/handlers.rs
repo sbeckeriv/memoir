@@ -74,6 +74,13 @@ pub struct AskSource {
 }
 
 #[derive(Deserialize)]
+pub struct AskParams {
+    pub q: String,
+    #[serde(default = "default_ask_k")]
+    pub k: u32,
+}
+
+#[derive(Deserialize)]
 pub struct AskBody {
     pub q: String,
     #[serde(default = "default_ask_k")]
@@ -214,15 +221,28 @@ pub async fn favicon(
     }
 }
 
+pub async fn ask_get(
+    State(state): State<AppState>,
+    Query(params): Query<AskParams>,
+) -> Result<Json<AskResponse>, StatusCode> {
+    ask_inner(state, params.q, params.k, vec![]).await
+}
+
 pub async fn ask(
     State(state): State<AppState>,
     Json(body): Json<AskBody>,
 ) -> Result<Json<AskResponse>, StatusCode> {
-    let q = body.q.clone();
-    let k = body.k;
+    ask_inner(state, body.q, body.k, body.sources).await
+}
 
-    let merged: Vec<(String, String)> = if !body.sources.is_empty() {
-        body.sources.into_iter().map(|s| (s.url, s.title)).collect()
+async fn ask_inner(
+    state: AppState,
+    q: String,
+    k: u32,
+    sources: Vec<AskSource>,
+) -> Result<Json<AskResponse>, StatusCode> {
+    let merged: Vec<(String, String)> = if !sources.is_empty() {
+        sources.into_iter().map(|s| (s.url, s.title)).collect()
     } else {
         // Use vector + BM25 when the embedder is available; fall back to BM25-only.
         let (vec_results, bm25_results) = if let Some(embedder) = state.embedder.clone() {
