@@ -72,6 +72,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Hide the window on close rather than destroying it so the app stays
         // alive in the menu bar.
         .on_window_event(|window, event| {
@@ -269,6 +270,13 @@ fn build_tray(
     let pause_idx = MenuItem::with_id(app, "pause_index", "Pause Indexing", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let autolaunch = MenuItem::with_id(app, "autolaunch", autolaunch_label, true, None::<&str>)?;
+    let check_updates = MenuItem::with_id(
+        app,
+        "check_updates",
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?;
     let sep3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
@@ -282,6 +290,7 @@ fn build_tray(
             &pause_idx,
             &sep2,
             &autolaunch,
+            &check_updates,
             &sep3,
             &quit,
         ],
@@ -336,6 +345,29 @@ fn build_tray(
                     let _ = al.enable();
                     let _ = autolaunch_item.set_text("✓ Launch at Login");
                 }
+            }
+
+            "check_updates" => {
+                use tauri_plugin_updater::UpdaterExt;
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    match app.updater() {
+                        Ok(updater) => match updater.check().await {
+                            Ok(Some(update)) => {
+                                tracing::info!(version = %update.version, "update available, installing");
+                                if let Err(e) = update
+                                    .download_and_install(|_, _| {}, || {})
+                                    .await
+                                {
+                                    tracing::warn!(error = %e, "update install failed");
+                                }
+                            }
+                            Ok(None) => tracing::info!("memoir is up to date"),
+                            Err(e) => tracing::warn!(error = %e, "update check failed"),
+                        },
+                        Err(e) => tracing::warn!(error = %e, "updater unavailable"),
+                    }
+                });
             }
 
             "quit" => app.exit(0),

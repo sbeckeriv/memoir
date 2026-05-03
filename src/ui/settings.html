@@ -163,6 +163,10 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       <label for="hotkey">Quick-search hotkey <span class="hint">e.g. CmdOrCtrl+Shift+Space</span></label>
       <input id="hotkey" type="text" placeholder="CmdOrCtrl+Shift+Space">
     </div>
+    <div class="field" style="max-width:200px">
+      <label for="cluster-score-high">Cluster score "high" threshold <span class="hint">0–1, default 0.65</span></label>
+      <input id="cluster-score-high" type="number" min="0" max="1" step="0.01" placeholder="0.65">
+    </div>
   </div>
 
   <h2>Browser</h2>
@@ -176,7 +180,9 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
         <option value="arc">Arc</option>
         <option value="edge">Edge</option>
         <option value="chromium">Chromium</option>
+        <option value="firefox">Firefox</option>
       </select>
+      <span id="browser-default-path" class="hint" style="display:block;margin-top:4px"></span>
     </div>
     <div class="field">
       <label for="history-path">History DB path <span class="hint">full path to the browser's History / history file</span></label>
@@ -280,6 +286,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
 
   <div class="form-actions">
     <button class="btn btn-primary" id="btn-save" onclick="save()">Save settings</button>
+    <a href="/setup" class="btn btn-secondary">Run setup wizard</a>
     <span class="toast" id="toast"></span>
   </div>
 
@@ -298,7 +305,9 @@ async function load() {
   document.getElementById('ui-poll-secs').value = s.application?.ui_poll_secs ?? '';
   document.getElementById('custom-css').value = s.application?.custom_css ?? '';
   document.getElementById('hotkey').value = s.application?.hotkey ?? '';
+  document.getElementById('cluster-score-high').value = s.application?.cluster_score_high ?? '';
   document.getElementById('browser-kind').value = s.browser?.kind ?? 'orion';
+  updateBrowserHint();
   document.getElementById('history-path').value = s.browser?.history_db_path ?? '';
   document.getElementById('data-dir').value = s.data?.dir ?? '';
   document.getElementById('delay-ms').value = s.fetch?.delay_ms ?? '';
@@ -335,6 +344,7 @@ async function save() {
       ui_poll_secs: parseInt(document.getElementById('ui-poll-secs').value, 10) || 30,
       custom_css: document.getElementById('custom-css').value,
       hotkey: document.getElementById('hotkey').value.trim(),
+      cluster_score_high: parseFloat(document.getElementById('cluster-score-high').value) || 0.65,
     },
     browser: {
       kind: document.getElementById('browser-kind').value,
@@ -380,6 +390,53 @@ async function save() {
     showToast('Save failed', true);
   }
 }
+
+const DEFAULT_PATHS = {
+  mac: {
+    orion:    '~/Library/Application Support/Orion/Defaults/history',
+    chrome:   '~/Library/Application Support/Google/Chrome/Default/History',
+    brave:    '~/Library/Application Support/BraveSoftware/Brave-Browser/Default/History',
+    arc:      '~/Library/Application Support/Arc/User Data/Default/History',
+    edge:     '~/Library/Application Support/Microsoft Edge/Default/History',
+    chromium: '~/Library/Application Support/Chromium/Default/History',
+    firefox:  '~/Library/Application Support/Firefox/Profiles/<profile>.default-release/places.sqlite',
+  },
+  linux: {
+    orion:    '',
+    chrome:   '~/.config/google-chrome/Default/History',
+    brave:    '~/.config/BraveSoftware/Brave-Browser/Default/History',
+    arc:      '',
+    edge:     '~/.config/microsoft-edge/Default/History',
+    chromium: '~/.config/chromium/Default/History',
+    firefox:  '~/.mozilla/firefox/<profile>.default-release/places.sqlite',
+  },
+  windows: {
+    orion:    '',
+    chrome:   '%APPDATA%\\Google\\Chrome\\User Data\\Default\\History',
+    brave:    '%APPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\Default\\History',
+    arc:      '',
+    edge:     '%APPDATA%\\Microsoft\\Edge\\User Data\\Default\\History',
+    chromium: '%APPDATA%\\Chromium\\User Data\\Default\\History',
+    firefox:  '%APPDATA%\\Mozilla\\Firefox\\Profiles\\<profile>.default-release\\places.sqlite',
+  },
+};
+
+function detectOs() {
+  const ua = navigator.userAgent;
+  if (ua.includes('Win')) return 'windows';
+  if (ua.includes('Mac')) return 'mac';
+  return 'linux';
+}
+
+function updateBrowserHint() {
+  const kind = document.getElementById('browser-kind').value;
+  const os = detectOs();
+  const path = DEFAULT_PATHS[os]?.[kind] ?? '';
+  const hint = document.getElementById('browser-default-path');
+  hint.textContent = path ? 'Default: ' + path : '';
+}
+
+document.getElementById('browser-kind').addEventListener('change', updateBrowserHint);
 
 function showToast(msg, error = false) {
   const t = document.getElementById('toast');

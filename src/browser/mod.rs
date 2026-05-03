@@ -1,4 +1,5 @@
 pub mod chromium;
+pub mod firefox;
 pub mod orion;
 
 use std::path::{Path, PathBuf};
@@ -76,5 +77,6 @@ pub fn for_config(settings: &BrowserSettings) -> Arc<dyn BrowserHistory> {
         | BrowserKind::Arc
         | BrowserKind::Edge => Arc::new(chromium::ChromiumBrowser),
         BrowserKind::Orion => Arc::new(orion::OrionBrowser),
+        BrowserKind::Firefox => Arc::new(firefox::FirefoxBrowser),
     }
 }

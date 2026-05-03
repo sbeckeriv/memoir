@@ -12,6 +12,7 @@ pub enum BrowserKind {
     Brave,
     Arc,
     Edge,
+    Firefox,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -73,6 +74,7 @@ pub struct ApplicationSettings {
     pub ui_poll_secs: u64,
     pub custom_css: String,
     pub hotkey: String,
+    pub cluster_score_high: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,6 +137,7 @@ impl Default for ApplicationSettings {
             ui_poll_secs: 30,
             custom_css: String::new(),
             hotkey: "CmdOrCtrl+Shift+Space".to_string(),
+            cluster_score_high: 0.65,
         }
     }
 }

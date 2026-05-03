@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Memoir",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "identifier": "app.memoir",
   "build": {
     "beforeDevCommand": "",
@@ -13,6 +13,14 @@
       "csp": null
     },
     "withGlobalTauri": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENEREE4RTYxMDM0RTk4NEIKUldSTG1FNERZWTdhemV4TW5BRy80MHMrNW5kbmFtMXlwUlZQSWQ2dG56U2Rxck1NY0JOVHMrRHYK",
+      "endpoints": [
+        "https://github.com/sbeckeriv/memoir/releases/latest/download/latest.json"
+      ]
+    }
   },
   "bundle": {
     "active": true,

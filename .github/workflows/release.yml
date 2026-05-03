@@ -61,15 +61,43 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: cargo tauri build --target aarch64-apple-darwin
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      - name: Locate DMG artifact
+      - name: Locate artifacts
         if: steps.check.outputs.exists == 'false'
-        id: dmg
+        id: artifacts
         run: |
           DMG=$(find target -name "*.dmg" | head -1)
-          echo "path=$DMG" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename $DMG)" >> "$GITHUB_OUTPUT"
+          TAR=$(find target -name "*.app.tar.gz" | head -1)
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=$(basename $DMG)" >> "$GITHUB_OUTPUT"
+          echo "tar=$TAR" >> "$GITHUB_OUTPUT"
+          echo "tar_name=$(basename $TAR)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate latest.json update manifest
+        if: steps.check.outputs.exists == 'false'
+        id: manifest
+        run: |
+          TAR="${{ steps.artifacts.outputs.tar }}"
+          SIG=$(cat "${TAR}.sig")
+          TAG="${{ steps.version.outputs.tag }}"
+          REPO="${{ github.repository }}"
+          URL="https://github.com/${REPO}/releases/download/${TAG}/${{ steps.artifacts.outputs.tar_name }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          cat > latest.json << EOF
+          {
+            "version": "${{ steps.version.outputs.version }}",
+            "notes": "See release notes at https://github.com/${REPO}/releases/tag/${TAG}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${SIG}",
+                "url": "${URL}"
+              }
+            }
+          }
+          EOF
 
       - name: Create GitHub release
         if: steps.check.outputs.exists == 'false'
@@ -82,7 +110,7 @@ jobs:
           body: |
             ## Installation
 
-            1. Download **${{ steps.dmg.outputs.name }}** below
+            1. Download **${{ steps.artifacts.outputs.dmg_name }}** below
             2. Open the DMG and drag **Memoir.app** to your Applications folder
             3. **Remove the quarantine flag** — macOS will say the app is "damaged" without this:
                ```
@@ -95,4 +123,7 @@ jobs:
             ---
 
             **Apple Silicon** — requires an M-series Mac (M1 or later).
-          files: ${{ steps.dmg.outputs.path }}
+          files: |
+            ${{ steps.artifacts.outputs.dmg }}
+            ${{ steps.artifacts.outputs.tar }}
+            latest.json

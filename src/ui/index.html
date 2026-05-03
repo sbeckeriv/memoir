@@ -294,7 +294,23 @@ main {
   padding: 0.15rem 0.45rem;
   border-radius: 20px;
   flex-shrink: 0;
+  position: relative;
+  cursor: default;
 }
+.cluster-score::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%; left: 50%;
+  transform: translateX(-50%);
+  background: #222; color: #fff;
+  padding: 3px 8px; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 400;
+  white-space: nowrap;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+.cluster-score:hover::after { opacity: 1; }
 .score-high  { background: #dcfce7; color: #15803d; }
 .score-mid   { background: #fef9c3; color: #a16207; }
 .score-low   { background: #f1f5f9; color: #64748b; }
@@ -435,7 +451,7 @@ main {
   </div>
 
   <div class="card" id="clusters-section" style="display:none">
-    <div class="card-title">Sessions</div>
+    <div class="card-title">Topics</div>
     <div class="cluster-list" id="cluster-list"></div>
     <div class="clusters-footer" id="clusters-footer" style="display:none">
       <button onclick="showHiddenClusters()"></button>
@@ -527,6 +543,7 @@ function renderSearchItems(items) {
         ${datesHtml}
       </div>
       <div class="result-actions">
+        <a class="icon-btn" href="https://web.archive.org/web/*/${esc(i.url)}" target="_blank" rel="noopener" title="View on Wayback Machine">⏱</a>
         <button class="icon-btn ${starClass}" title="${i.starred ? 'Unstar' : 'Star'}" onclick="toggleResultStar(this)">${starChar}</button>
         <button class="icon-btn del" title="Delete from index" onclick="deleteResult(this)">🗑</button>
       </div>
@@ -669,6 +686,8 @@ async function startPolling() {
     const s = await r.json();
     const v = s.application?.ui_poll_secs;
     if (typeof v === 'number') pollSecs = v;
+    const t = s.application?.cluster_score_high;
+    if (typeof t === 'number') { scoreHighThreshold = t; renderClusters(); }
   } catch {}
   _pollFetched = await loadStats();
   if (pollSecs <= 0) return;
@@ -728,7 +747,7 @@ function renderClusters() {
 
   if (hiddenCount > 0) {
     footer.style.display = 'block';
-    footer.querySelector('button').textContent = `Show ${hiddenCount} hidden session${hiddenCount > 1 ? 's' : ''}`;
+    footer.querySelector('button').textContent = `Show ${hiddenCount} hidden topic${hiddenCount > 1 ? 's' : ''}`;
   } else {
     footer.style.display = 'none';
   }
@@ -754,8 +773,10 @@ function fmtSession(startedAt, durationMins) {
   return `${dayStr} ${timeStr}${dur}`;
 }
 
+let scoreHighThreshold = 0.65;
+
 function scoreClass(score) {
-  if (score >= 0.65) return 'score-high';
+  if (score >= scoreHighThreshold) return 'score-high';
   if (score >= 0.45) return 'score-mid';
   return 'score-low';
 }
@@ -779,11 +800,11 @@ function renderCluster(c) {
   return `<div class="cluster-row" data-fp="${fp}">
     <div class="cluster-header" onclick="this.closest('.cluster-row').classList.toggle('open')">
       <span class="cluster-label">${esc(c.label)}</span>
-      <span class="cluster-score ${scoreClass(c.score)}">${scorePct}%</span>
+      <span class="cluster-score ${scoreClass(c.score)}" data-tooltip="${scoreClass(c.score) === 'score-high' ? 'Pages in this session were tightly focused on one topic' : scoreClass(c.score) === 'score-mid' ? 'Pages in this session had moderate topic overlap' : 'Pages in this session covered mixed topics'}">${scorePct}%</span>
       <span class="cluster-meta">${esc(meta)}</span>
       <span class="cluster-toggle">▾</span>
       <button class="icon-btn" title="Dismiss this session"
-        onclick="event.stopPropagation(); dismissCluster('${fp}')">✕</button>
+        onclick="event.stopPropagation(); dismissCluster('${fp}')" title="Dismiss this topic">✕</button>
     </div>
     <div class="cluster-body">
       <div class="cluster-domains">${domains}</div>
@@ -794,7 +815,7 @@ function renderCluster(c) {
       <div class="cluster-actions">
         <button class="cluster-action-btn danger"
           onclick="hideTopic('${esc(c.dominant_domain)}', this)">
-          Hide all "${esc(c.dominant_domain)}" sessions
+          Hide all "${esc(c.dominant_domain)}" topics
         </button>
       </div>
     </div>
@@ -809,7 +830,7 @@ function dismissCluster(fp) {
 }
 
 async function hideTopic(domain, btn) {
-  if (!confirm(`Hide all future sessions dominated by ${domain}?\n\nYou can undo this in Manage.`)) return;
+  if (!confirm(`Hide all future topics dominated by ${domain}?\n\nYou can undo this in Manage.`)) return;
   btn.disabled = true;
   btn.textContent = 'Hiding…';
   await fetch(`/api/clusters/ignore?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
