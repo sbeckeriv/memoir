@@ -34,6 +34,7 @@ pub struct Application {
     sync_paused: Arc<AtomicBool>,
     palette_hide: Arc<tokio::sync::Notify>,
     pub log: Arc<crate::session_log::SessionLog>,
+    pub state: AppState,
 }
 
 impl Application {
@@ -60,11 +61,11 @@ impl Application {
             palette_hide: palette_hide.clone(),
             log: log.clone(),
         };
-        let router = build_router(state);
+        let router = build_router(state.clone());
         let addr = format!("{}:{}", config.application.host, config.application.port);
         let listener = tokio::net::TcpListener::bind(addr).await?;
         let port = listener.local_addr()?.port();
-        Ok(Self { port, listener, router, sync_paused, palette_hide, log })
+        Ok(Self { port, listener, router, sync_paused, palette_hide, log, state })
     }
 
     pub fn port(&self) -> u16 {

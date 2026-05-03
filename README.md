@@ -20,6 +20,10 @@ Everything runs on your computer. memoir never sends your history, your queries,
 
 ---
 
+<a href="screenshots/search.png"><img src="screenshots/search.png" width="380" alt="Search results"></a> <a href="screenshots/ask.png"><img src="screenshots/ask.png" width="380" alt="Ask answer"></a>
+
+---
+
 ## Features
 
 **Search**
@@ -215,12 +219,6 @@ Pass `--config-dir <path>` to use a config directory other than the default:
 memoir --config-dir /path/to/config
 ```
 
-**MCP server** — expose memoir's search index as a Model Context Protocol tool:
-
-```sh
-memoir mcp
-```
-
 ### As a new tab page
 
 In Orion: **Settings → New Tab → Custom URL → `http://localhost:3000`**
@@ -229,7 +227,7 @@ In Orion: **Settings → New Tab → Custom URL → `http://localhost:3000`**
 
 ## MCP integration
 
-memoir implements a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio. This lets any MCP-compatible client (Claude Desktop, Cursor, etc.) query your personal history index.
+memoir implements a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio. The MCP server starts automatically alongside the web server — no separate process needed.
 
 To use it, add memoir to your MCP client config. Example for Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
@@ -238,11 +236,13 @@ To use it, add memoir to your MCP client config. Example for Claude Desktop (`~/
   "mcpServers": {
     "memoir": {
       "command": "/usr/local/bin/memoir",
-      "args": ["mcp"]
+      "args": ["--no-sync"]
     }
   }
 }
 ```
+
+> **Note:** `--no-sync` is recommended when memoir is already running as your main app, to avoid two processes syncing simultaneously. Omit it if Claude Desktop is your only memoir instance.
 
 Available MCP tools:
 
@@ -250,7 +250,9 @@ Available MCP tools:
 |------|-------------|
 | `search` | Full-text + semantic search over your indexed history |
 | `ask` | Ask a question; returns an LLM answer grounded in your history |
-| `starred` | Retrieve your starred/bookmarked pages |
+| `get_page` | Retrieve the full stored content of a page by URL |
+| `get_recent` | List recently visited pages, newest first |
+| `get_starred` | Retrieve your starred/bookmarked pages |
 
 ---
 

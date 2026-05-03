@@ -11,6 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("memoir=debug")),
         )
+        .with_writer(std::io::stderr)
         .init();
 
     let raw: Vec<String> = std::env::args().skip(1).collect();
@@ -30,15 +31,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     match subcommand {
         Some("sync") => memoir::sync::run(&config, embedder, None).await?,
-        Some("mcp") => {
-            let index_path = config.data.dir.join("index.db");
-            let index = memoir::IndexStore::open(&index_path)?;
-            memoir::mcp::run(index)?;
-        }
         _ => {
             let sync_paused = Arc::new(AtomicBool::new(false));
             let app = Application::build(config.clone(), embedder.clone(), sync_paused.clone()).await?;
-            println!("Listening on http://127.0.0.1:{}", app.port());
+            eprintln!("Listening on http://127.0.0.1:{}", app.port());
+
+            tokio::spawn(memoir::mcp::run(app.state.clone()));
 
             if !no_sync {
                 let cfg = config.clone();
