@@ -10,6 +10,7 @@ host = "127.0.0.1"
 port = 3000
 ui_poll_secs = 30
 custom_css = ""
+hotkey = "CmdOrCtrl+Shift+Space"
 ```
 
 | Key | Default | Description |
@@ -18,6 +19,7 @@ custom_css = ""
 | `port` | `3000` | Port the HTTP server listens on |
 | `ui_poll_secs` | `30` | How often the UI refreshes stats and lists. Set to `0` to disable |
 | `custom_css` | `""` | CSS injected into every page. See `HTML.md` for available classes |
+| `hotkey` | `CmdOrCtrl+Shift+Space` | Global shortcut to open the quick-search palette. Uses Tauri key syntax: modifiers are `CmdOrCtrl`, `Shift`, `Alt`, `Super`; key names follow [standard key identifiers](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values). Takes effect on next app launch. |
 
 ## `[browser]`
 

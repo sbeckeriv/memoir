@@ -159,6 +159,10 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       <label for="ui-poll-secs">UI refresh interval <span class="hint">seconds, 0 to disable</span></label>
       <input id="ui-poll-secs" type="number" min="0" placeholder="30">
     </div>
+    <div class="field" style="max-width:300px">
+      <label for="hotkey">Quick-search hotkey <span class="hint">e.g. CmdOrCtrl+Shift+Space</span></label>
+      <input id="hotkey" type="text" placeholder="CmdOrCtrl+Shift+Space">
+    </div>
   </div>
 
   <h2>Browser</h2>
@@ -293,6 +297,7 @@ async function load() {
   document.getElementById('port').value = s.application?.port ?? '';
   document.getElementById('ui-poll-secs').value = s.application?.ui_poll_secs ?? '';
   document.getElementById('custom-css').value = s.application?.custom_css ?? '';
+  document.getElementById('hotkey').value = s.application?.hotkey ?? '';
   document.getElementById('browser-kind').value = s.browser?.kind ?? 'orion';
   document.getElementById('history-path').value = s.browser?.history_db_path ?? '';
   document.getElementById('data-dir').value = s.data?.dir ?? '';
@@ -329,6 +334,7 @@ async function save() {
       port: parseInt(document.getElementById('port').value, 10) || 3000,
       ui_poll_secs: parseInt(document.getElementById('ui-poll-secs').value, 10) || 30,
       custom_css: document.getElementById('custom-css').value,
+      hotkey: document.getElementById('hotkey').value.trim(),
     },
     browser: {
       kind: document.getElementById('browser-kind').value,

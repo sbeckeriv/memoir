@@ -84,6 +84,8 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let ah_for_server = app_handle.clone();
 
+            let hotkey = memoir::Settings::load().application.hotkey;
+
             // Channel to receive the bound port from the async server task.
             let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
             let (log_tx, log_rx) = std::sync::mpsc::channel::<Arc<memoir::SessionLog>>();
@@ -183,7 +185,7 @@ pub fn run() {
 
             // Register Cmd+Shift+Space to toggle the palette.
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            app.global_shortcut().register("CmdOrCtrl+Shift+Space")?;
+            app.global_shortcut().register(hotkey.as_str())?;
 
             build_tray(app, sp_tray, port, log.clone())?;
 

@@ -159,8 +159,7 @@ pub async fn run(
                     tokio::task::spawn_blocking(move || idx.has_favicon(&host2).map(|has| !has))
                         .await??
                 };
-                if needs
-                    && let Some((favicon_host, mime, data)) = fetcher.fetch_favicon(&url).await
+                if needs && let Some((favicon_host, mime, data)) = fetcher.fetch_favicon(&url).await
                 {
                     let idx = index.clone();
                     tokio::task::spawn_blocking(move || {

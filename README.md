@@ -20,7 +20,7 @@ Everything runs on your computer. memoir never sends your history, your queries,
 
 ---
 
-<a href="screenshots/search.png"><img src="screenshots/search.png" width="380" alt="Search results"></a> <a href="screenshots/ask.png"><img src="screenshots/ask.png" width="380" alt="Ask answer"></a>
+<a href="screenshots/search.png"><img src="screenshots/search.png" width="380" alt="Search results"></a> <a href="screenshots/ask.png"><img src="screenshots/ask.png" width="380" alt="Ask answer"></a> <a href="screenshots/hotkey.png"><img src="screenshots/hotkey.png" width="380" alt="Quick-search palette"></a>
 
 ---
 
@@ -187,7 +187,7 @@ The Tauri app starts automatically and keeps running in the menu bar after the w
 | Pause Sync / Resume Sync | Toggle the background sync loop |
 | Quit | Exit the app |
 
-**Keyboard shortcut:** Press **⌘⇧Space** anywhere to open the search palette. Results appear live as you type.
+**Keyboard shortcut:** Press **⌘⇧Space** anywhere to open the search palette. Results appear live as you type. The shortcut is configurable via `application.hotkey` in `config.toml`.
 
 ---
 

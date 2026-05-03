@@ -72,6 +72,7 @@ pub struct ApplicationSettings {
     pub port: u16,
     pub ui_poll_secs: u64,
     pub custom_css: String,
+    pub hotkey: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +134,7 @@ impl Default for ApplicationSettings {
             port: 3000,
             ui_poll_secs: 30,
             custom_css: String::new(),
+            hotkey: "CmdOrCtrl+Shift+Space".to_string(),
         }
     }
 }
@@ -228,7 +230,6 @@ impl Default for SyncSettings {
         }
     }
 }
-
 
 impl FetchSettings {
     pub fn is_banned(&self, url: &str) -> bool {
