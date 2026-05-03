@@ -149,14 +149,14 @@ List and row used in the Starred and Recent cards. Each `.site-item` contains a 
 
 Thin bar below the header showing index statistics (hidden until data loads).
 
-### Cluster / Sessions card
+### Cluster / Topics card
 
 | Class | Element |
 |---|---|
-| `.cluster-list` | Container for all session clusters |
-| `.cluster-row` | One session. Add `.open` to expand it |
+| `.cluster-list` | Container for all topic clusters |
+| `.cluster-row` | One topic. Add `.open` to expand it |
 | `.cluster-header` | Clickable header row |
-| `.cluster-label` | Session title text |
+| `.cluster-label` | Topic title text |
 | `.cluster-score` | Coherence score pill — also has `.score-high`, `.score-mid`, or `.score-low` |
 | `.cluster-meta` | Timestamp + duration text |
 | `.cluster-toggle` | `▾` chevron icon |
@@ -166,9 +166,9 @@ Thin bar below the header showing index statistics (hidden until data loads).
 | `.cluster-pages` | List of page links |
 | `.cluster-page-link` | Individual page link |
 | `.cluster-show-more` | "N more pages" expand button |
-| `.cluster-actions` | Action buttons at the bottom of an expanded cluster |
+| `.cluster-actions` | Action buttons at the bottom of an expanded topic |
 | `.cluster-action-btn` | Action button. `.cluster-action-btn.danger` turns red on hover |
-| `.clusters-footer` | "Show N hidden sessions" link beneath the cluster list |
+| `.clusters-footer` | "Show N hidden topics" link beneath the cluster list |
 
 ---
 

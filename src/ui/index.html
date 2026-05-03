@@ -48,9 +48,14 @@ header h1 a { display: block; }
   gap: 0.5rem;
 }
 
-.search-row input {
+.input-wrap {
+  position: relative;
   flex: 1;
-  padding: 0.5rem 0.75rem;
+}
+
+.input-wrap input {
+  width: 100%;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
   border: 1px solid #d0d0d8;
   border-radius: 6px;
   font-size: 0.9rem;
@@ -59,11 +64,28 @@ header h1 a { display: block; }
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.search-row input:focus {
+.input-wrap input:focus {
   border-color: #5b8af4;
   background: #fff;
   box-shadow: 0 0 0 3px rgba(91,138,244,0.15);
 }
+
+.clear-btn {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #bbb;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 3px;
+  display: none;
+}
+.clear-btn:hover { color: #555; }
 
 .btn {
   padding: 0.5rem 0.9rem;
@@ -419,7 +441,10 @@ main {
 <header>
   <h1><a href="/"><img src="data:image/png;base64,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" class="app-icon" alt="memoir"></a></h1>
   <div class="search-row">
-    <input id="q" type="text" placeholder="search your history… (end with ? to also ask)" autocomplete="off">
+    <div class="input-wrap">
+      <input id="q" type="text" placeholder="search your history… (end with ? to also ask)" autocomplete="off">
+      <button class="clear-btn" id="q-clear" tabindex="-1">✕</button>
+    </div>
     <button class="btn btn-search" id="btn-search">Search</button>
   </div>
   <span class="header-nav"><a href="/manage">Manage</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
@@ -430,7 +455,10 @@ main {
   <div id="results-section" class="card">
     <div class="card-title" id="results-label">Search Results</div>
     <div class="search-row" style="margin-bottom:0.5rem">
-      <input id="ask-q" type="text" placeholder="ask a question about these results…" autocomplete="off">
+      <div class="input-wrap">
+        <input id="ask-q" type="text" placeholder="ask a question about these results…" autocomplete="off">
+        <button class="clear-btn" id="ask-clear" tabindex="-1">✕</button>
+      </div>
       <button class="btn btn-ask" id="btn-ask">Ask</button>
     </div>
     <div class="spinner" id="ask-spinner"></div>
@@ -462,6 +490,29 @@ main {
 <script>
 const qInput = document.getElementById('q');
 const askInput = document.getElementById('ask-q');
+const qClear = document.getElementById('q-clear');
+const askClear = document.getElementById('ask-clear');
+
+function syncClear(input, btn) {
+  btn.style.display = input.value ? 'block' : 'none';
+}
+
+qInput.addEventListener('input', () => syncClear(qInput, qClear));
+askInput.addEventListener('input', () => syncClear(askInput, askClear));
+
+qClear.addEventListener('click', () => {
+  qInput.value = '';
+  syncClear(qInput, qClear);
+  document.getElementById('results-section').style.display = 'none';
+  qInput.focus();
+});
+
+askClear.addEventListener('click', () => {
+  askInput.value = '';
+  syncClear(askInput, askClear);
+  document.getElementById('ask-body').innerHTML = '';
+  askInput.focus();
+});
 
 document.getElementById('btn-search').addEventListener('click', () => doSearch());
 document.getElementById('btn-ask').addEventListener('click', () => doAsk());
@@ -734,7 +785,7 @@ loadClusters();
 
 function renderClusters() {
   const dismissed = getDismissed();
-  const visible = _allClusters.filter(c => !dismissed.has(clusterFingerprint(c)));
+  const visible = _allClusters.filter(c => c.score >= scoreHighThreshold && !dismissed.has(clusterFingerprint(c)));
   const hiddenCount = _allClusters.length - visible.length;
 
   if (!visible.length && !hiddenCount) return;

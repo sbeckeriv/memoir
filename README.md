@@ -141,6 +141,8 @@ memoir uses the OpenAI-compatible `/v1/chat/completions` endpoint by default, an
 
 > **Gatekeeper note:** memoir is not signed with an Apple Developer certificate. macOS will show a warning the first time. Right-click → Open bypasses this. Alternatively: `xattr -dr com.apple.quarantine /Applications/Memoir.app`
 
+Once installed, Memoir can update itself — use **Check for Updates…** in the menu bar icon menu.
+
 ### Build from source
 
 ```sh

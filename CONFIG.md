@@ -11,6 +11,7 @@ port = 3000
 ui_poll_secs = 30
 custom_css = ""
 hotkey = "CmdOrCtrl+Shift+Space"
+cluster_score_high = 0.65
 ```
 
 | Key | Default | Description |
@@ -20,6 +21,7 @@ hotkey = "CmdOrCtrl+Shift+Space"
 | `ui_poll_secs` | `30` | How often the UI refreshes stats and lists. Set to `0` to disable |
 | `custom_css` | `""` | CSS injected into every page. See `HTML.md` for available classes |
 | `hotkey` | `CmdOrCtrl+Shift+Space` | Global shortcut to open the quick-search palette. Uses Tauri key syntax: modifiers are `CmdOrCtrl`, `Shift`, `Alt`, `Super`; key names follow [standard key identifiers](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values). Takes effect on next app launch. |
+| `cluster_score_high` | `0.65` | Minimum coherence score (0–1) for a topic cluster to appear on the home page. Topics below this threshold are hidden |
 
 ## `[browser]`
 
@@ -31,7 +33,7 @@ history_db_path = "~/Library/Application Support/Orion/Defaults/history"
 
 | Key | Default | Description |
 |---|---|---|
-| `kind` | `orion` | Browser to read history from. One of: `orion`, `chrome`, `brave`, `arc`, `edge`, `chromium` |
+| `kind` | `orion` | Browser to read history from. One of: `orion`, `chrome`, `brave`, `arc`, `edge`, `chromium`, `firefox` |
 | `history_db_path` | *(Orion default)* | Full path to the browser's SQLite history file |
 
 ## `[data]`
