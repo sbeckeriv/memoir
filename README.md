@@ -227,9 +227,26 @@ In Orion: **Settings → New Tab → Custom URL → `http://localhost:3000`**
 
 ## MCP integration
 
-memoir implements a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio. The MCP server starts automatically alongside the web server — no separate process needed.
+memoir implements a [Model Context Protocol](https://modelcontextprotocol.io/) server. Two transports are supported — use whichever fits your client.
 
-To use it, add memoir to your MCP client config. Example for Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+### HTTP transport (recommended when memoir is already running)
+
+The MCP endpoint is built into the web server at `POST /mcp`. No separate process needed — if memoir is running, MCP is running.
+
+```json
+{
+  "mcpServers": {
+    "memoir": {
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+### stdio transport
+
+memoir also speaks MCP over stdin/stdout. The client spawns memoir as a subprocess and pipes messages to it. The full web server and sync loop start alongside the MCP handler.
 
 ```json
 {
@@ -242,9 +259,11 @@ To use it, add memoir to your MCP client config. Example for Claude Desktop (`~/
 }
 ```
 
-> **Note:** `--no-sync` is recommended when memoir is already running as your main app, to avoid two processes syncing simultaneously. Omit it if Claude Desktop is your only memoir instance.
+> **`--no-sync`** prevents a second sync process when memoir is already running as the desktop app. Omit it if this is your only memoir instance.
 
-Available MCP tools:
+Config file location for Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+### Available tools
 
 | Tool | Description |
 |------|-------------|
@@ -268,6 +287,7 @@ The web interface is backed by a local Axum server. You can call it directly fro
 | `GET` | `/setup` | Setup wizard |
 | `GET` | `/palette` | Quick search palette |
 | `GET` | `/health` | Health check |
+| `POST` | `/mcp` | MCP JSON-RPC endpoint (HTTP transport) |
 | `GET` | `/api/recent?limit=20` | Recently visited pages |
 | `GET` | `/api/top-sites?limit=20` | Most visited pages |
 | `GET` | `/api/search?q=…&limit=20` | Full-text + semantic search |

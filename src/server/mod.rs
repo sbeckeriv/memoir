@@ -129,6 +129,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/custom-css", get(handlers::custom_css))
         .route("/log", get(handlers::log_page))
         .route("/api/log", get(handlers::log_entries))
+        .route("/mcp", post(handlers::mcp_http))
         .layer(cors)
         .with_state(state)
 }

@@ -852,3 +852,13 @@ pub async fn log_entries(
     };
     Json(entries)
 }
+
+pub async fn mcp_http(
+    State(state): State<AppState>,
+    Json(msg): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    match crate::mcp::dispatch(&state, msg).await {
+        Some(resp) => Json(resp).into_response(),
+        None => StatusCode::ACCEPTED.into_response(),
+    }
+}

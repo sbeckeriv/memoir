@@ -28,6 +28,29 @@ fn xml_escape(s: &str) -> String {
      .replace('"', "&quot;")
 }
 
+/// Handle a single JSON-RPC message. Returns `None` for notifications (no `id`).
+pub async fn dispatch(state: &AppState, msg: Value) -> Option<Value> {
+    let id = msg.get("id")?.clone();
+    let method = msg["method"].as_str().unwrap_or("");
+    let params = msg.get("params").cloned().unwrap_or(json!({}));
+
+    let result: Result<Value, String> = match method {
+        "initialize" => Ok(handle_initialize()),
+        "tools/list" => Ok(handle_tools_list()),
+        "tools/call" => handle_tools_call(state, &params).await,
+        _ => Err(format!("unknown method: {method}")),
+    };
+
+    Some(match result {
+        Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
+        Err(e) => json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": { "code": -32600, "message": e }
+        }),
+    })
+}
+
 pub async fn run(state: AppState) -> anyhow::Result<()> {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
@@ -42,35 +65,12 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
             Ok(v) => v,
             Err(_) => continue,
         };
-
-        let id = match msg.get("id") {
-            Some(id) => id.clone(),
-            None => continue,
-        };
-
-        let method = msg["method"].as_str().unwrap_or("");
-        let params = msg.get("params").cloned().unwrap_or(json!({}));
-
-        let result: Result<Value, String> = match method {
-            "initialize" => Ok(handle_initialize()),
-            "tools/list" => Ok(handle_tools_list()),
-            "tools/call" => handle_tools_call(&state, &params).await,
-            _ => Err(format!("unknown method: {method}")),
-        };
-
-        let response = match result {
-            Ok(r) => json!({ "jsonrpc": "2.0", "id": id, "result": r }),
-            Err(e) => json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "error": { "code": -32600, "message": e }
-            }),
-        };
-
-        let mut out = serde_json::to_string(&response)?;
-        out.push('\n');
-        writer.write_all(out.as_bytes()).await?;
-        writer.flush().await?;
+        if let Some(response) = dispatch(&state, msg).await {
+            let mut out = serde_json::to_string(&response)?;
+            out.push('\n');
+            writer.write_all(out.as_bytes()).await?;
+            writer.flush().await?;
+        }
     }
 
     Ok(())
