@@ -1,21 +1,15 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v0.2.0)"
-        required: true
-        type: string
-      draft:
-        description: "Create as draft release"
-        required: false
-        default: true
-        type: boolean
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
 
 jobs:
   release-macos:
     name: Build macOS Apple Silicon binary
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: macos-latest
     permissions:
       contents: write
@@ -29,25 +23,48 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
+      - name: Read version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "memoir") | .version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" --repo "${{ github.repository }}" &>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Cache Rust build artifacts
+        if: steps.check.outputs.exists == 'false'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
 
       - name: Install Node (required by Tauri CLI)
+        if: steps.check.outputs.exists == 'false'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install Tauri CLI
+        if: steps.check.outputs.exists == 'false'
         run: cargo install tauri-cli --version "^2" --locked
 
       - name: Build macOS app
+        if: steps.check.outputs.exists == 'false'
         run: cargo tauri build --target aarch64-apple-darwin
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
       - name: Locate DMG artifact
+        if: steps.check.outputs.exists == 'false'
         id: dmg
         run: |
           DMG=$(find target -name "*.dmg" | head -1)
@@ -55,21 +72,25 @@ jobs:
           echo "name=$(basename $DMG)" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
+        if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag }}
-          name: memoir ${{ github.event.inputs.tag }}
-          draft: ${{ github.event.inputs.draft }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: memoir ${{ steps.version.outputs.tag }}
+          draft: false
           generate_release_notes: true
           body: |
             ## Installation
 
             1. Download **${{ steps.dmg.outputs.name }}** below
             2. Open the DMG and drag **Memoir.app** to your Applications folder
-            3. **First launch:** right-click the app and choose **Open**
-               macOS blocks unsigned apps on double-click. Right-click → Open bypasses Gatekeeper.
-               Alternatively: `xattr -dr com.apple.quarantine /Applications/Memoir.app`
-            4. After the first open, you can launch it normally from Spotlight or the Applications folder
+            3. **Remove the quarantine flag** — macOS will say the app is "damaged" without this:
+               ```
+               xattr -dr com.apple.quarantine /Applications/Memoir.app
+               ```
+            4. Launch Memoir from Spotlight or your Applications folder
+
+            > Memoir is not signed with an Apple Developer certificate. The quarantine flag is added by your browser when you download any unsigned app; the xattr command removes it.
 
             ---
 
