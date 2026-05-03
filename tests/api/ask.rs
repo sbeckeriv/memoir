@@ -51,7 +51,10 @@ async fn ask_no_matching_pages_returns_no_relevant_message() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.expect("failed to parse JSON");
     assert!(
-        body["answer"].as_str().unwrap().contains("No relevant pages found"),
+        body["answer"]
+            .as_str()
+            .unwrap()
+            .contains("No relevant pages found"),
         "answer should indicate no pages found"
     );
     assert!(
@@ -72,6 +75,12 @@ async fn ask_response_has_expected_fields() {
         .expect("failed to send request");
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.expect("failed to parse JSON");
-    assert!(body["answer"].is_string(), "response must have an 'answer' string field");
-    assert!(body["sources"].is_array(), "response must have a 'sources' array field");
+    assert!(
+        body["answer"].is_string(),
+        "response must have an 'answer' string field"
+    );
+    assert!(
+        body["sources"].is_array(),
+        "response must have a 'sources' array field"
+    );
 }

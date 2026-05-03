@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
-use tracing::{debug, info, warn};
 use serde::Serialize;
 use serde_json;
 use thiserror::Error;
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -144,13 +144,19 @@ impl IndexStore {
         )?;
         let _ = conn.execute("ALTER TABLE pages ADD COLUMN embedding BLOB", []);
         let _ = conn.execute("ALTER TABLE pages ADD COLUMN last_visit_at TIMESTAMP", []);
-        let _ = conn.execute("ALTER TABLE pages ADD COLUMN fetch_attempts INTEGER NOT NULL DEFAULT 0", []);
-        let _ = conn.execute("ALTER TABLE pages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0", []);
+        let _ = conn.execute(
+            "ALTER TABLE pages ADD COLUMN fetch_attempts INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE pages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         let _ = conn.execute("ALTER TABLE pages ADD COLUMN first_visit_at TIMESTAMP", []);
         let _ = conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS banned_hosts (host TEXT PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS cluster_ignored_domains (domain TEXT PRIMARY KEY);
-             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);"
+             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);",
         );
         // Migrate from external-content FTS to standalone. External-content FTS
         // requires passing old column values on delete, which desynchronises under
@@ -179,8 +185,7 @@ impl IndexStore {
             info!(rows = n, "FTS migration complete");
         }
         debug!("checking DB integrity");
-        let first_issue: String =
-            conn.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
+        let first_issue: String = conn.query_row("PRAGMA integrity_check(1)", [], |r| r.get(0))?;
         if first_issue != "ok" {
             warn!(issue = %first_issue, "integrity check failed — dropping and rebuilding FTS index");
             conn.execute_batch(
@@ -193,7 +198,9 @@ impl IndexStore {
             info!("FTS index rebuilt");
         }
         debug!("index ready");
-        Ok(Self { path: path.to_path_buf() })
+        Ok(Self {
+            path: path.to_path_buf(),
+        })
     }
 
     pub fn upsert_page(&self, url: &str, title: &str, body: &str) -> Result<()> {
@@ -202,11 +209,9 @@ impl IndexStore {
         let tx = conn.transaction()?;
 
         let existing: Option<i64> = tx
-            .query_row(
-                "SELECT id FROM pages WHERE url = ?1",
-                [url],
-                |row| row.get(0),
-            )
+            .query_row("SELECT id FROM pages WHERE url = ?1", [url], |row| {
+                row.get(0)
+            })
             .optional()?;
 
         if let Some(id) = existing {
@@ -277,7 +282,10 @@ impl IndexStore {
             .filter_map(|r| r.ok())
             .collect();
         for (url, visit_at) in visits {
-            if !patterns.iter().any(|p| crate::config::matches_ban_pattern(url, p)) {
+            if !patterns
+                .iter()
+                .any(|p| crate::config::matches_ban_pattern(url, p))
+            {
                 stmt.execute([url, visit_at])?;
             }
         }
@@ -286,9 +294,7 @@ impl IndexStore {
 
     pub fn stats(&self) -> Result<Stats> {
         let conn = Connection::open(&self.path)?;
-        let count = |sql: &str| -> rusqlite::Result<u64> {
-            conn.query_row(sql, [], |r| r.get(0))
-        };
+        let count = |sql: &str| -> rusqlite::Result<u64> { conn.query_row(sql, [], |r| r.get(0)) };
         Ok(Stats {
             total_pages: count("SELECT COUNT(*) FROM pages")?,
             fetched: count("SELECT COUNT(*) FROM pages WHERE fetch_status = 'fetched'")?,
@@ -475,7 +481,10 @@ impl IndexStore {
         Ok(count)
     }
 
-    pub fn get_pages_for_clustering(&self, days: u32) -> Result<Vec<crate::cluster::PageForClustering>> {
+    pub fn get_pages_for_clustering(
+        &self,
+        days: u32,
+    ) -> Result<Vec<crate::cluster::PageForClustering>> {
         let conn = Connection::open(&self.path)?;
         let cutoff = (chrono::Utc::now() - chrono::Duration::days(days as i64))
             .format("%Y-%m-%d %H:%M:%S")
@@ -490,20 +499,35 @@ impl IndexStore {
             .query_map([cutoff], |r| {
                 let ts: String = r.get(2)?;
                 let emb_bytes: Option<Vec<u8>> = r.get(3)?;
-                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, ts, emb_bytes))
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    ts,
+                    emb_bytes,
+                ))
             })?
             .filter_map(|r| r.ok())
             .filter_map(|(url, title, ts, emb_bytes)| {
-                let visited_at = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%dT%H:%M:%S%.f%#z")
-                    .or_else(|_| chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%dT%H:%M:%SZ"))
-                    .or_else(|_| chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S"))
-                    .ok()?;
+                let visited_at =
+                    chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%dT%H:%M:%S%.f%#z")
+                        .or_else(|_| {
+                            chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%dT%H:%M:%SZ")
+                        })
+                        .or_else(|_| {
+                            chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S")
+                        })
+                        .ok()?;
                 let embedding = emb_bytes.map(|b| {
                     b.chunks_exact(4)
                         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
                         .collect::<Vec<f32>>()
                 });
-                Some(crate::cluster::PageForClustering { url, title, visited_at, embedding })
+                Some(crate::cluster::PageForClustering {
+                    url,
+                    title,
+                    visited_at,
+                    embedding,
+                })
             })
             .collect();
         Ok(rows)
@@ -511,47 +535,55 @@ impl IndexStore {
 
     pub fn get_page(&self, url: &str) -> Result<Option<serde_json::Value>> {
         let conn = Connection::open(&self.path)?;
-        let row = conn.query_row(
-            "SELECT url, title, body, fetch_status, starred, first_visit_at, last_visit_at
+        let row = conn
+            .query_row(
+                "SELECT url, title, body, fetch_status, starred, first_visit_at, last_visit_at
              FROM pages WHERE url = ?1",
-            [url],
-            |r| {
-                Ok(serde_json::json!({
-                    "url": r.get::<_, String>(0)?,
-                    "title": r.get::<_, String>(1)?,
-                    "body": r.get::<_, String>(2)?,
-                    "fetch_status": r.get::<_, String>(3)?,
-                    "starred": r.get::<_, i32>(4)? != 0,
-                    "first_visit_at": r.get::<_, Option<String>>(5)?,
-                    "last_visit_at": r.get::<_, Option<String>>(6)?,
-                }))
-            },
-        ).optional()?;
+                [url],
+                |r| {
+                    Ok(serde_json::json!({
+                        "url": r.get::<_, String>(0)?,
+                        "title": r.get::<_, String>(1)?,
+                        "body": r.get::<_, String>(2)?,
+                        "fetch_status": r.get::<_, String>(3)?,
+                        "starred": r.get::<_, i32>(4)? != 0,
+                        "first_visit_at": r.get::<_, Option<String>>(5)?,
+                        "last_visit_at": r.get::<_, Option<String>>(6)?,
+                    }))
+                },
+            )
+            .optional()?;
         Ok(row)
     }
 
     pub fn get_starred(&self, limit: u32) -> Result<Vec<PageEntry>> {
         let conn = Connection::open(&self.path)?;
-        let rows = conn.prepare(
-            "SELECT url, title, fetch_status, starred
+        let rows = conn
+            .prepare(
+                "SELECT url, title, fetch_status, starred
              FROM pages WHERE starred = 1
              ORDER BY title
              LIMIT ?1",
-        )?
-        .query_map([limit], |r| {
-            Ok(PageEntry {
-                url: r.get(0)?,
-                title: r.get(1)?,
-                fetch_status: r.get(2)?,
-                starred: r.get::<_, i32>(3)? != 0,
-            })
-        })?
-        .filter_map(|r| r.ok())
-        .collect::<Vec<_>>();
+            )?
+            .query_map([limit], |r| {
+                Ok(PageEntry {
+                    url: r.get(0)?,
+                    title: r.get(1)?,
+                    fetch_status: r.get(2)?,
+                    starred: r.get::<_, i32>(3)? != 0,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect::<Vec<_>>();
         Ok(rows)
     }
 
-    pub fn list_pages(&self, limit: u32, offset: u32, filter: Option<&str>) -> Result<Vec<PageEntry>> {
+    pub fn list_pages(
+        &self,
+        limit: u32,
+        offset: u32,
+        filter: Option<&str>,
+    ) -> Result<Vec<PageEntry>> {
         let conn = Connection::open(&self.path)?;
         let rows: Vec<PageEntry> = if let Some(f) = filter.filter(|s| !s.is_empty()) {
             conn.prepare(
@@ -560,12 +592,14 @@ impl IndexStore {
                  ORDER BY last_visit_at DESC NULLS LAST
                  LIMIT ?2 OFFSET ?3",
             )?
-            .query_map(params![f, limit, offset], |r| Ok(PageEntry {
-                url: r.get(0)?,
-                title: r.get(1)?,
-                fetch_status: r.get(2)?,
-                starred: r.get::<_, i32>(3)? != 0,
-            }))?
+            .query_map(params![f, limit, offset], |r| {
+                Ok(PageEntry {
+                    url: r.get(0)?,
+                    title: r.get(1)?,
+                    fetch_status: r.get(2)?,
+                    starred: r.get::<_, i32>(3)? != 0,
+                })
+            })?
             .filter_map(|r| r.ok())
             .collect()
         } else {
@@ -574,12 +608,14 @@ impl IndexStore {
                  ORDER BY last_visit_at DESC NULLS LAST
                  LIMIT ?1 OFFSET ?2",
             )?
-            .query_map(params![limit, offset], |r| Ok(PageEntry {
-                url: r.get(0)?,
-                title: r.get(1)?,
-                fetch_status: r.get(2)?,
-                starred: r.get::<_, i32>(3)? != 0,
-            }))?
+            .query_map(params![limit, offset], |r| {
+                Ok(PageEntry {
+                    url: r.get(0)?,
+                    title: r.get(1)?,
+                    fetch_status: r.get(2)?,
+                    starred: r.get::<_, i32>(3)? != 0,
+                })
+            })?
             .filter_map(|r| r.ok())
             .collect()
         };
@@ -610,9 +646,8 @@ impl IndexStore {
 
     pub fn urls_needing_fetch(&self, limit: u32) -> Result<Vec<String>> {
         let conn = Connection::open(&self.path)?;
-        let mut stmt = conn.prepare(
-            "SELECT url FROM pages WHERE fetch_status = 'pending' LIMIT ?1",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT url FROM pages WHERE fetch_status = 'pending' LIMIT ?1")?;
         stmt.query_map([limit], |row| row.get(0))?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(Into::into)
@@ -699,11 +734,9 @@ impl IndexStore {
              WHERE fetch_status = 'fetched' AND embedding IS NULL
              LIMIT ?1",
         )?;
-        stmt.query_map([limit], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
+        stmt.query_map([limit], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
     }
 
     /// Cosine-similarity search over all stored embeddings. Only returns results
@@ -720,11 +753,18 @@ impl IndexStore {
 
         let mut candidates: Vec<(String, String, f32)> = stmt
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Vec<u8>>(2)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Vec<u8>>(2)?,
+                ))
             })?
             .filter_map(|r| match r {
                 Ok(v) => Some(v),
-                Err(e) => { warn!(error = %e, "vector search: skipping row"); None }
+                Err(e) => {
+                    warn!(error = %e, "vector search: skipping row");
+                    None
+                }
             })
             .filter_map(|(url, title, bytes)| {
                 let emb = bytes_to_vec(&bytes);
@@ -761,7 +801,11 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 { 0.0 } else { dot / (norm_a * norm_b) }
+    if norm_a == 0.0 || norm_b == 0.0 {
+        0.0
+    } else {
+        dot / (norm_a * norm_b)
+    }
 }
 
 #[cfg(test)]
@@ -804,10 +848,18 @@ mod tests {
     fn upsert_updates_existing_page() {
         let (store, _dir) = test_store();
         store
-            .upsert_page("https://example.com", "Old Title", "old content about nothing")
+            .upsert_page(
+                "https://example.com",
+                "Old Title",
+                "old content about nothing",
+            )
             .unwrap();
         store
-            .upsert_page("https://example.com", "New Title", "new content about Rust async")
+            .upsert_page(
+                "https://example.com",
+                "New Title",
+                "new content about Rust async",
+            )
             .unwrap();
         let old = store.search("nothing", 10).unwrap();
         assert!(old.is_empty(), "old content should be gone from index");
@@ -821,10 +873,14 @@ mod tests {
         let (store, _dir) = test_store();
         store
             .register_urls(
-                ["https://a.com", "https://b.com", "https://c.com"].iter().copied(),
+                ["https://a.com", "https://b.com", "https://c.com"]
+                    .iter()
+                    .copied(),
             )
             .unwrap();
-        store.mark_status("https://b.com", FetchStatus::AuthWall).unwrap();
+        store
+            .mark_status("https://b.com", FetchStatus::AuthWall)
+            .unwrap();
         let pending = store.urls_needing_fetch(10).unwrap();
         assert_eq!(pending.len(), 2);
         assert!(!pending.contains(&"https://b.com".to_string()));
@@ -866,8 +922,12 @@ mod tests {
 
         let rust_vec = vec![1.0f32, 0.0, 0.0, 0.0];
         let python_vec = vec![0.0f32, 1.0, 0.0, 0.0];
-        store.store_embedding("https://rust.org", &rust_vec).unwrap();
-        store.store_embedding("https://python.org", &python_vec).unwrap();
+        store
+            .store_embedding("https://rust.org", &rust_vec)
+            .unwrap();
+        store
+            .store_embedding("https://python.org", &python_vec)
+            .unwrap();
 
         let query = vec![1.0f32, 0.0, 0.0, 0.0]; // identical to rust_vec
         let results = store.vector_search(&query, 5, 0.0).unwrap();
@@ -880,8 +940,12 @@ mod tests {
     #[test]
     fn vector_search_min_score_filters_low_similarity() {
         let (store, _dir) = test_store();
-        store.upsert_page("https://a.com", "A", "content a").unwrap();
-        store.upsert_page("https://b.com", "B", "content b").unwrap();
+        store
+            .upsert_page("https://a.com", "A", "content a")
+            .unwrap();
+        store
+            .upsert_page("https://b.com", "B", "content b")
+            .unwrap();
 
         let a_vec = vec![1.0f32, 0.0];
         let b_vec = vec![0.0f32, 1.0];
@@ -890,21 +954,31 @@ mod tests {
 
         let query = vec![1.0f32, 0.0]; // orthogonal to b_vec
         let results = store.vector_search(&query, 5, 0.5).unwrap();
-        assert_eq!(results.len(), 1, "only a.com should clear the 0.5 threshold");
+        assert_eq!(
+            results.len(),
+            1,
+            "only a.com should clear the 0.5 threshold"
+        );
         assert_eq!(results[0].url, "https://a.com");
     }
 
     #[test]
     fn pages_needing_embedding_returns_fetched_without_embedding() {
         let (store, _dir) = test_store();
-        store.upsert_page("https://fetched.com", "F", "content").unwrap();
-        store.register_urls(["https://pending.com"].iter().copied()).unwrap();
+        store
+            .upsert_page("https://fetched.com", "F", "content")
+            .unwrap();
+        store
+            .register_urls(["https://pending.com"].iter().copied())
+            .unwrap();
 
         let pending = store.pages_needing_embedding(10).unwrap();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].0, "https://fetched.com");
 
-        store.store_embedding("https://fetched.com", &[1.0, 0.0]).unwrap();
+        store
+            .store_embedding("https://fetched.com", &[1.0, 0.0])
+            .unwrap();
         let pending2 = store.pages_needing_embedding(10).unwrap();
         assert!(pending2.is_empty());
     }

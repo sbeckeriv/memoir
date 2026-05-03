@@ -60,15 +60,21 @@ pub fn copy_db(source: &Path) -> std::io::Result<HistorySnapshot> {
             Err(e) => return Err(e),
         }
     }
-    Ok(HistorySnapshot { path: dest, _dir: dir })
+    Ok(HistorySnapshot {
+        path: dest,
+        _dir: dir,
+    })
 }
 
 /// Returns the right adapter based on `settings.kind`.
 /// Chrome, Brave, Arc, and Edge all share the Chromium schema.
 pub fn for_config(settings: &BrowserSettings) -> Arc<dyn BrowserHistory> {
     match settings.kind {
-        BrowserKind::Chromium | BrowserKind::Chrome | BrowserKind::Brave
-        | BrowserKind::Arc | BrowserKind::Edge => Arc::new(chromium::ChromiumBrowser),
+        BrowserKind::Chromium
+        | BrowserKind::Chrome
+        | BrowserKind::Brave
+        | BrowserKind::Arc
+        | BrowserKind::Edge => Arc::new(chromium::ChromiumBrowser),
         BrowserKind::Orion => Arc::new(orion::OrionBrowser),
     }
 }

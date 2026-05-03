@@ -2,10 +2,10 @@ use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 
 use axum::{
+    Json,
     extract::{Query, State},
     http::{StatusCode, header},
     response::{Html, IntoResponse, Response},
-    Json,
 };
 use serde::{Deserialize, Serialize};
 
@@ -49,9 +49,9 @@ fn markdown_to_html(md: &str) -> String {
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 #[derive(Deserialize)]
@@ -95,7 +95,6 @@ fn default_ask_k() -> u32 {
     5
 }
 
-
 pub async fn index_page() -> Html<&'static str> {
     Html(include_str!("../ui/index.html"))
 }
@@ -114,12 +113,13 @@ pub async fn recent(
     let config_ban = state.config.read().unwrap().fetch.ban.clone();
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        let snapshot = browser::copy_db(&browser_db_path)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let snapshot =
+            browser::copy_db(&browser_db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let conn = rusqlite::Connection::open(snapshot.path())
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         // Fetch more than needed so we have enough after filtering.
-        let items = browser.recent(&conn, limit * 4)
+        let items = browser
+            .recent(&conn, limit * 4)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         let db_banned = index.get_banned_hosts().unwrap_or_default();
@@ -128,8 +128,12 @@ pub async fn recent(
             .into_iter()
             .filter(|item| {
                 let url = &item.url;
-                !db_banned.iter().any(|p| crate::config::matches_ban_pattern(url, p))
-                    && !config_ban.iter().any(|p| crate::config::matches_ban_pattern(url, p))
+                !db_banned
+                    .iter()
+                    .any(|p| crate::config::matches_ban_pattern(url, p))
+                    && !config_ban
+                        .iter()
+                        .any(|p| crate::config::matches_ban_pattern(url, p))
             })
             .take(limit as usize)
             .collect();
@@ -148,11 +152,12 @@ pub async fn top_sites(
     let browser = state.browser.clone();
     let limit = params.limit;
     tokio::task::spawn_blocking(move || {
-        let snapshot = browser::copy_db(&browser_db_path)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let snapshot =
+            browser::copy_db(&browser_db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let conn = rusqlite::Connection::open(snapshot.path())
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        browser.top_sites(&conn, limit)
+        browser
+            .top_sites(&conn, limit)
             .map(Json)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -172,7 +177,11 @@ pub async fn search(
         let results = index
             .search(&query, limit)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        log.push(LogKind::Search, &query, Some(format!("{} result(s)", results.len())));
+        log.push(
+            LogKind::Search,
+            &query,
+            Some(format!("{} result(s)", results.len())),
+        );
         Ok(Json(results))
     })
     .await
@@ -258,7 +267,11 @@ pub async fn ask(
     };
 
     if merged.is_empty() {
-        state.log.push(LogKind::Llm, &q, Some("No relevant pages found".to_string()));
+        state.log.push(
+            LogKind::Llm,
+            &q,
+            Some("No relevant pages found".to_string()),
+        );
         return Ok(Json(AskResponse {
             answer: "No relevant pages found.".to_string(),
             sources: vec![],
@@ -277,7 +290,10 @@ pub async fn ask(
 
     let (per_source, system_prompt) = {
         let cfg = state.config.read().unwrap();
-        (cfg.llm.max_context_chars / merged.len().max(1), cfg.llm.system_prompt.clone())
+        (
+            cfg.llm.max_context_chars / merged.len().max(1),
+            cfg.llm.system_prompt.clone(),
+        )
     };
     let sources_xml = merged
         .iter()
@@ -306,15 +322,28 @@ pub async fn ask(
         .await
         .map_err(|e| {
             tracing::warn!(error = %e, "LLM generate failed");
-            state.log.push(LogKind::Error, format!("LLM error for query: {q}"), Some(e.to_string()));
+            state.log.push(
+                LogKind::Error,
+                format!("LLM error for query: {q}"),
+                Some(e.to_string()),
+            );
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     let answer = markdown_to_html(&answer_md);
 
     let sources: Vec<String> = merged.into_iter().map(|(url, _)| url).collect();
     let snippet: String = answer_md.chars().take(300).collect();
-    let src_preview = sources.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
-    state.log.push(LogKind::Llm, &q, Some(format!("{snippet}\n\nSources: {src_preview}")));
+    let src_preview = sources
+        .iter()
+        .take(3)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    state.log.push(
+        LogKind::Llm,
+        &q,
+        Some(format!("{snippet}\n\nSources: {src_preview}")),
+    );
     Ok(Json(AskResponse { answer, sources }))
 }
 
@@ -354,10 +383,14 @@ pub struct ListPagesParams {
     pub q: Option<String>,
 }
 
-fn default_page_limit() -> u32 { 50 }
+fn default_page_limit() -> u32 {
+    50
+}
 
 #[derive(Serialize)]
-pub struct DeletedCount { pub deleted: u64 }
+pub struct DeletedCount {
+    pub deleted: u64,
+}
 
 pub async fn list_pages(
     State(state): State<AppState>,
@@ -366,7 +399,8 @@ pub async fn list_pages(
     let index = state.index.clone();
     let q = params.q.clone();
     tokio::task::spawn_blocking(move || {
-        index.list_pages(params.limit, params.offset, q.as_deref())
+        index
+            .list_pages(params.limit, params.offset, q.as_deref())
             .map(Json)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -380,7 +414,8 @@ pub async fn starred(
 ) -> Result<Json<Vec<PageEntry>>, StatusCode> {
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        index.get_starred(params.limit)
+        index
+            .get_starred(params.limit)
             .map(Json)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -394,7 +429,8 @@ pub async fn delete_page(
 ) -> Result<StatusCode, StatusCode> {
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        index.delete_page(&params.url)
+        index
+            .delete_page(&params.url)
             .map(|_| StatusCode::NO_CONTENT)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -408,7 +444,8 @@ pub async fn delete_host(
 ) -> Result<Json<DeletedCount>, StatusCode> {
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        index.delete_host(&params.host)
+        index
+            .delete_host(&params.host)
             .map(|n| Json(DeletedCount { deleted: n }))
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -422,7 +459,8 @@ pub async fn ban_host(
 ) -> Result<Json<DeletedCount>, StatusCode> {
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        index.ban_host(&params.host)
+        index
+            .ban_host(&params.host)
             .map(|n| Json(DeletedCount { deleted: n }))
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -436,7 +474,8 @@ pub async fn set_starred(
 ) -> Result<StatusCode, StatusCode> {
     let index = state.index.clone();
     tokio::task::spawn_blocking(move || {
-        index.set_starred(&params.url, params.starred)
+        index
+            .set_starred(&params.url, params.starred)
             .map(|_| StatusCode::NO_CONTENT)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
     })
@@ -462,7 +501,10 @@ pub async fn bookmark(
         let fetch_config = state.config.read().unwrap().fetch.clone();
         let fetcher = match crate::fetch::Fetcher::new(&fetch_config) {
             Ok(f) => f,
-            Err(e) => { tracing::warn!(error = %e, "bookmark: failed to create fetcher"); return; }
+            Err(e) => {
+                tracing::warn!(error = %e, "bookmark: failed to create fetcher");
+                return;
+            }
         };
         match fetcher.fetch(&params.url).await {
             crate::fetch::FetchResult::Ok(page) => {
@@ -470,24 +512,31 @@ pub async fn bookmark(
                 let url2 = params.url.clone();
                 let title = page.title.clone();
                 let body = page.body.clone();
-                if let Err(e) = tokio::task::spawn_blocking(move || {
-                    index.upsert_page(&url2, &title, &body)
-                }).await {
+                if let Err(e) =
+                    tokio::task::spawn_blocking(move || index.upsert_page(&url2, &title, &body))
+                        .await
+                {
                     tracing::warn!(error = %e, url = %params.url, "bookmark: index failed");
                     return;
                 }
                 if let Some(embedder) = &state.embedder {
                     let text = format!("{} {}", page.title, page.body);
                     let embedder = embedder.clone();
-                    if let Ok(Ok(vec)) = tokio::task::spawn_blocking(move || embedder.embed_one(&text)).await {
+                    if let Ok(Ok(vec)) =
+                        tokio::task::spawn_blocking(move || embedder.embed_one(&text)).await
+                    {
                         let index = state.index.clone();
                         let url2 = params.url.clone();
-                        let _ = tokio::task::spawn_blocking(move || index.store_embedding(&url2, &vec)).await;
+                        let _ =
+                            tokio::task::spawn_blocking(move || index.store_embedding(&url2, &vec))
+                                .await;
                     }
                 }
                 tracing::info!(url = %params.url, "bookmark: indexed");
             }
-            other => tracing::warn!(url = %params.url, result = ?other, "bookmark: fetch did not succeed"),
+            other => {
+                tracing::warn!(url = %params.url, result = ?other, "bookmark: fetch did not succeed")
+            }
         }
     });
 
@@ -500,7 +549,9 @@ pub struct ClustersParams {
     pub days: u32,
 }
 
-fn default_cluster_days() -> u32 { 14 }
+fn default_cluster_days() -> u32 {
+    14
+}
 
 pub async fn clusters(
     State(state): State<AppState>,
@@ -511,9 +562,7 @@ pub async fn clusters(
         let pages = index
             .get_pages_for_clustering(params.days)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        let ignored = index
-            .get_cluster_ignored_domains()
-            .unwrap_or_default();
+        let ignored = index.get_cluster_ignored_domains().unwrap_or_default();
         Ok(Json(cluster::find_clusters(pages, &ignored)))
     })
     .await
@@ -613,11 +662,31 @@ pub async fn setup_detect() -> Json<Vec<DetectedBrowser>> {
         .unwrap_or_else(|| std::path::PathBuf::from("/"));
 
     let candidates = vec![
-        ("Orion", "orion",    home.join("Library/Application Support/Orion/Defaults/history")),
-        ("Chrome", "chrome",  home.join("Library/Application Support/Google/Chrome/Default/History")),
-        ("Brave", "brave",    home.join("Library/Application Support/BraveSoftware/Brave-Browser/Default/History")),
-        ("Arc", "arc",        home.join("Library/Application Support/Arc/User Data/Default/History")),
-        ("Edge", "edge",      home.join("Library/Application Support/Microsoft Edge/Default/History")),
+        (
+            "Orion",
+            "orion",
+            home.join("Library/Application Support/Orion/Defaults/history"),
+        ),
+        (
+            "Chrome",
+            "chrome",
+            home.join("Library/Application Support/Google/Chrome/Default/History"),
+        ),
+        (
+            "Brave",
+            "brave",
+            home.join("Library/Application Support/BraveSoftware/Brave-Browser/Default/History"),
+        ),
+        (
+            "Arc",
+            "arc",
+            home.join("Library/Application Support/Arc/User Data/Default/History"),
+        ),
+        (
+            "Edge",
+            "edge",
+            home.join("Library/Application Support/Microsoft Edge/Default/History"),
+        ),
     ];
 
     let browsers = candidates
@@ -647,15 +716,18 @@ pub struct TestLlmResult {
     pub message: String,
 }
 
-pub async fn setup_test_llm(
-    Query(params): Query<TestLlmParams>,
-) -> Json<TestLlmResult> {
+pub async fn setup_test_llm(Query(params): Query<TestLlmParams>) -> Json<TestLlmResult> {
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
     {
         Ok(c) => c,
-        Err(_) => return Json(TestLlmResult { ok: false, message: "client error".to_string() }),
+        Err(_) => {
+            return Json(TestLlmResult {
+                ok: false,
+                message: "client error".to_string(),
+            });
+        }
     };
 
     let base = params.base_url.trim_end_matches('/');
@@ -670,7 +742,10 @@ pub async fn setup_test_llm(
             }
         }
     }
-    Json(TestLlmResult { ok: false, message: "Could not reach LLM server".to_string() })
+    Json(TestLlmResult {
+        ok: false,
+        message: "Could not reach LLM server".to_string(),
+    })
 }
 
 #[derive(Deserialize)]
@@ -755,7 +830,9 @@ pub async fn open_url(Query(params): Query<UrlParam>) -> StatusCode {
     #[cfg(target_os = "linux")]
     let _ = std::process::Command::new("xdg-open").arg(url).spawn();
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd").args(["/c", "start", "", url.as_str()]).spawn();
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", "", url.as_str()])
+        .spawn();
     StatusCode::NO_CONTENT
 }
 
@@ -768,7 +845,10 @@ pub async fn export_starred(State(state): State<AppState>) -> Response {
             Ok(json) => (
                 [
                     (header::CONTENT_TYPE, "application/json"),
-                    (header::CONTENT_DISPOSITION, "attachment; filename=\"memoir-starred.json\""),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"memoir-starred.json\"",
+                    ),
                 ],
                 json,
             )

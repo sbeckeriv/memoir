@@ -35,13 +35,12 @@ const MIN_PAGES: usize = 3;
 const MIN_SCORE: f32 = 0.35;
 
 const STOP_WORDS: &[&str] = &[
-    "the", "a", "an", "of", "in", "to", "for", "with", "on", "at", "by",
-    "from", "is", "was", "that", "this", "it", "as", "are", "be", "have",
-    "has", "had", "do", "does", "did", "will", "would", "could", "should",
-    "may", "might", "can", "and", "or", "but", "not", "no", "what", "how",
-    "why", "when", "where", "who", "which", "more", "also", "new", "about",
-    "its", "their", "your", "our", "my", "get", "use", "using", "used",
-    "into", "than", "then", "so", "all", "one", "two", "just", "via",
+    "the", "a", "an", "of", "in", "to", "for", "with", "on", "at", "by", "from", "is", "was",
+    "that", "this", "it", "as", "are", "be", "have", "has", "had", "do", "does", "did", "will",
+    "would", "could", "should", "may", "might", "can", "and", "or", "but", "not", "no", "what",
+    "how", "why", "when", "where", "who", "which", "more", "also", "new", "about", "its", "their",
+    "your", "our", "my", "get", "use", "using", "used", "into", "than", "then", "so", "all", "one",
+    "two", "just", "via",
 ];
 
 pub fn find_clusters(pages: Vec<PageForClustering>, ignored_domains: &[String]) -> Vec<Cluster> {
@@ -54,7 +53,11 @@ pub fn find_clusters(pages: Vec<PageForClustering>, ignored_domains: &[String]) 
         .filter(|c| !ignored_domains.iter().any(|d| d == &c.dominant_domain))
         .collect();
     // Most coherent sessions first.
-    clusters.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    clusters.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     clusters
 }
 
@@ -64,7 +67,10 @@ fn split_sessions(mut pages: Vec<PageForClustering>) -> Vec<Vec<PageForClusterin
     let mut current: Vec<PageForClustering> = Vec::new();
     for page in pages {
         if let Some(last) = current.last() {
-            let gap = page.visited_at.signed_duration_since(last.visited_at).num_minutes();
+            let gap = page
+                .visited_at
+                .signed_duration_since(last.visited_at)
+                .num_minutes();
             if gap > SESSION_GAP_MINS {
                 sessions.push(std::mem::take(&mut current));
             }
@@ -95,7 +101,10 @@ fn score_session(pages: Vec<PageForClustering>) -> Option<Cluster> {
 
     let cluster_pages = pages
         .into_iter()
-        .map(|p| ClusterPage { url: p.url, title: p.title })
+        .map(|p| ClusterPage {
+            url: p.url,
+            title: p.title,
+        })
         .collect();
 
     Some(Cluster {
@@ -119,7 +128,11 @@ fn embedding_coherence(embeddings: &[&Vec<f32>]) -> f32 {
             count += 1;
         }
     }
-    if count == 0 { 0.0 } else { total / count as f32 }
+    if count == 0 {
+        0.0
+    } else {
+        total / count as f32
+    }
 }
 
 fn title_overlap_score(pages: &[PageForClustering]) -> f32 {
@@ -135,7 +148,11 @@ fn title_overlap_score(pages: &[PageForClustering]) -> f32 {
     // Words that appear in ≥2 documents
     let shared: usize = freq.values().filter(|&&n| n >= 2).count();
     let total_unique: usize = freq.len();
-    if total_unique == 0 { 0.0 } else { shared as f32 / total_unique as f32 }
+    if total_unique == 0 {
+        0.0
+    } else {
+        shared as f32 / total_unique as f32
+    }
 }
 
 fn extract_label(pages: &[PageForClustering]) -> String {
@@ -148,7 +165,11 @@ fn extract_label(pages: &[PageForClustering]) -> String {
     }
     let mut sorted: Vec<(String, usize)> = freq.into_iter().filter(|(_, n)| *n >= 2).collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    let top: Vec<String> = sorted.into_iter().take(3).map(|(w, _)| capitalize(&w)).collect();
+    let top: Vec<String> = sorted
+        .into_iter()
+        .take(3)
+        .map(|(w, _)| capitalize(&w))
+        .collect();
     if top.is_empty() {
         // Fall back to most-visited domain
         let domain = pages
@@ -156,7 +177,10 @@ fn extract_label(pages: &[PageForClustering]) -> String {
             .filter_map(|p| host_from_url(&p.url))
             .collect::<Vec<_>>()
             .into_iter()
-            .fold(HashMap::new(), |mut m, h| { *m.entry(h).or_insert(0usize) += 1; m })
+            .fold(HashMap::new(), |mut m, h| {
+                *m.entry(h).or_insert(0usize) += 1;
+                m
+            })
             .into_iter()
             .max_by_key(|(_, n)| *n)
             .map(|(h, _)| h)
@@ -227,7 +251,11 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 { 0.0 } else { dot / (norm_a * norm_b) }
+    if norm_a == 0.0 || norm_b == 0.0 {
+        0.0
+    } else {
+        dot / (norm_a * norm_b)
+    }
 }
 
 #[cfg(test)]
@@ -292,8 +320,10 @@ mod tests {
             make_page("https://c.com", "Async Rust programming", 10),
         ];
         let label = extract_label(&pages);
-        assert!(label.to_lowercase().contains("rust") || label.to_lowercase().contains("async"),
-            "label was: {label}");
+        assert!(
+            label.to_lowercase().contains("rust") || label.to_lowercase().contains("async"),
+            "label was: {label}"
+        );
     }
 
     #[test]
@@ -304,6 +334,9 @@ mod tests {
             make_page("https://c.com", "Guitar theory", 10),
         ];
         let clusters = find_clusters(pages, &[]);
-        assert!(clusters.is_empty(), "unrelated pages should not form a cluster");
+        assert!(
+            clusters.is_empty(),
+            "unrelated pages should not form a cluster"
+        );
     }
 }

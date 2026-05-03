@@ -1,11 +1,14 @@
 mod handlers;
 
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, RwLock};
 
-use axum::{Router, routing::{delete, get, post}};
-use axum::http::{header, Method};
+use axum::http::{Method, header};
+use axum::{
+    Router,
+    routing::{delete, get, post},
+};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::browser::BrowserHistory;
@@ -65,7 +68,15 @@ impl Application {
         let addr = format!("{}:{}", config.application.host, config.application.port);
         let listener = tokio::net::TcpListener::bind(addr).await?;
         let port = listener.local_addr()?.port();
-        Ok(Self { port, listener, router, sync_paused, palette_hide, log, state })
+        Ok(Self {
+            port,
+            listener,
+            router,
+            sync_paused,
+            palette_hide,
+            log,
+            state,
+        })
     }
 
     pub fn port(&self) -> u16 {
@@ -109,9 +120,10 @@ fn build_router(state: AppState) -> Router {
         .route("/api/ban", post(handlers::ban_host))
         .route("/api/bookmark", post(handlers::bookmark))
         .route("/api/clusters", get(handlers::clusters))
-        .route("/api/clusters/ignore",
-            post(handlers::ignore_cluster_domain)
-            .delete(handlers::unignore_cluster_domain))
+        .route(
+            "/api/clusters/ignore",
+            post(handlers::ignore_cluster_domain).delete(handlers::unignore_cluster_domain),
+        )
         .route("/api/sync", post(handlers::trigger_sync))
         .route("/api/sync/status", get(handlers::sync_status))
         .route("/api/sync/pause", post(handlers::sync_pause))
@@ -125,7 +137,10 @@ fn build_router(state: AppState) -> Router {
         .route("/api/palette/hide", post(handlers::hide_palette))
         .route("/api/open-url", get(handlers::open_url))
         .route("/settings", get(handlers::settings_page))
-        .route("/api/settings", get(handlers::get_settings).post(handlers::save_settings))
+        .route(
+            "/api/settings",
+            get(handlers::get_settings).post(handlers::save_settings),
+        )
         .route("/api/custom-css", get(handlers::custom_css))
         .route("/log", get(handlers::log_page))
         .route("/api/log", get(handlers::log_entries))

@@ -11,8 +11,8 @@ pub mod session_log;
 pub mod sync;
 
 pub use config::{
-    ApplicationSettings, BrowserKind, BrowserSettings, DataSettings, FetchSettings,
-    LlmProvider, LlmSettings, Settings,
+    ApplicationSettings, BrowserKind, BrowserSettings, DataSettings, FetchSettings, LlmProvider,
+    LlmSettings, Settings,
 };
 pub use embed::{EmbedText, Embedder};
 pub use index::{FetchStatus, IndexStore, PageEntry, SearchResult, Stats, VectorResult};

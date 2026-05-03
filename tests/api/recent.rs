@@ -71,7 +71,10 @@ async fn recent_most_recent_item_is_correct() {
         .unwrap();
 
     let items: Vec<serde_json::Value> = response.json().await.unwrap();
-    assert_eq!(items[0]["url"].as_str().unwrap(), "https://example.com/page1");
+    assert_eq!(
+        items[0]["url"].as_str().unwrap(),
+        "https://example.com/page1"
+    );
 }
 
 #[tokio::test]

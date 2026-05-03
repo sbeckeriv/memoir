@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use memoir::{Application, Embedder, EmbedText, Settings};
+use memoir::{Application, EmbedText, Embedder, Settings};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -33,7 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Some("sync") => memoir::sync::run(&config, embedder, None).await?,
         _ => {
             let sync_paused = Arc::new(AtomicBool::new(false));
-            let app = Application::build(config.clone(), embedder.clone(), sync_paused.clone()).await?;
+            let app =
+                Application::build(config.clone(), embedder.clone(), sync_paused.clone()).await?;
             eprintln!("Listening on http://127.0.0.1:{}", app.port());
 
             tokio::spawn(memoir::mcp::run(app.state.clone()));
@@ -102,7 +103,9 @@ fn parse_args(args: &[String]) -> (Option<PathBuf>, Option<&str>, bool) {
                 subcommand = Some(s);
                 i += 1;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
     (config_dir, subcommand, no_sync)

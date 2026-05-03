@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::server::AppState;
@@ -23,9 +23,9 @@ even if the answer is not explicitly stated.\n\
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Handle a single JSON-RPC message. Returns `None` for notifications (no `id`).
@@ -225,7 +225,9 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, St
             }
 
             if merged.is_empty() {
-                return Ok(json!({ "content": [{ "type": "text", "text": "No relevant pages found." }] }));
+                return Ok(
+                    json!({ "content": [{ "type": "text", "text": "No relevant pages found." }] }),
+                );
             }
 
             let urls: Vec<String> = merged.iter().map(|(u, _)| u.clone()).collect();
@@ -262,14 +264,20 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, St
 
             let system_prompt = {
                 let cfg = state.config.read().unwrap();
-                let template = cfg.llm.system_prompt.clone()
+                let template = cfg
+                    .llm
+                    .system_prompt
+                    .clone()
                     .unwrap_or_else(|| SYSTEM_PROMPT_TEMPLATE.to_string());
                 let date = chrono::Local::now().format("%Y-%m-%d");
                 format!("The current date is {date}.\n{template}")
             };
-            let prompt = format!("<information>\n{sources_xml}\n</information>\n\nQuestion: {query}");
+            let prompt =
+                format!("<information>\n{sources_xml}\n</information>\n\nQuestion: {query}");
 
-            let answer = state.llm.generate(&prompt, Some(&system_prompt))
+            let answer = state
+                .llm
+                .generate(&prompt, Some(&system_prompt))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -300,7 +308,9 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, St
                     let starred = p["starred"].as_bool().unwrap_or(false);
                     let visited = p["last_visit_at"].as_str().unwrap_or("unknown");
                     let preview: String = body.chars().take(4000).collect();
-                    format!("Title: {title}\nURL: {url}\nStarred: {starred}\nLast visited: {visited}\n\n{preview}")
+                    format!(
+                        "Title: {title}\nURL: {url}\nStarred: {starred}\nLast visited: {visited}\n\n{preview}"
+                    )
                 }
             };
             json!([{ "type": "text", "text": text }])
@@ -320,7 +330,11 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, St
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
-                        let title = if p.title.is_empty() { p.url.as_str() } else { p.title.as_str() };
+                        let title = if p.title.is_empty() {
+                            p.url.as_str()
+                        } else {
+                            p.title.as_str()
+                        };
                         format!("{}. {}\n   {}", i + 1, title, p.url)
                     })
                     .collect::<Vec<_>>()
@@ -343,7 +357,11 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, St
                     .iter()
                     .enumerate()
                     .map(|(i, p)| {
-                        let title = if p.title.is_empty() { p.url.as_str() } else { p.title.as_str() };
+                        let title = if p.title.is_empty() {
+                            p.url.as_str()
+                        } else {
+                            p.title.as_str()
+                        };
                         format!("{}. {}\n   {}", i + 1, title, p.url)
                     })
                     .collect::<Vec<_>>()

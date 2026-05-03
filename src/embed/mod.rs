@@ -16,13 +16,18 @@ impl Embedder {
         let model = TextEmbedding::try_new(
             InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(true),
         )?;
-        Ok(Self { model: Mutex::new(model) })
+        Ok(Self {
+            model: Mutex::new(model),
+        })
     }
 }
 
 impl EmbedText for Embedder {
     fn embed_one(&self, text: &str) -> anyhow::Result<Vec<f32>> {
-        let mut model = self.model.lock().map_err(|e| anyhow::anyhow!("embedder lock: {e}"))?;
+        let mut model = self
+            .model
+            .lock()
+            .map_err(|e| anyhow::anyhow!("embedder lock: {e}"))?;
         let mut results = model.embed(vec![text], None)?;
         anyhow::ensure!(!results.is_empty(), "model returned no embeddings");
         Ok(results.remove(0))
@@ -41,6 +46,9 @@ mod tests {
         let vec = embedder.embed_one("hello world").unwrap();
         assert_eq!(vec.len(), 384);
         let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 0.01, "BGE embeddings should be unit-normalised");
+        assert!(
+            (norm - 1.0).abs() < 0.01,
+            "BGE embeddings should be unit-normalised"
+        );
     }
 }

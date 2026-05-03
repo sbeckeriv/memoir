@@ -43,7 +43,8 @@ fn collect_items(value: &plist::Value, out: &mut Vec<(String, String)>) {
             }
         }
         plist::Value::Dictionary(dict) => {
-            let url = dict.get("URLString")
+            let url = dict
+                .get("URLString")
                 .or_else(|| dict.get("url"))
                 .or_else(|| dict.get("URL"))
                 .and_then(|v| v.as_string())
@@ -51,7 +52,8 @@ fn collect_items(value: &plist::Value, out: &mut Vec<(String, String)>) {
 
             if let Some(url) = url {
                 if url.starts_with("http://") || url.starts_with("https://") {
-                    let title = dict.get("title")
+                    let title = dict
+                        .get("title")
                         .and_then(|v| v.as_string())
                         .or_else(|| {
                             dict.get("URIDictionary")

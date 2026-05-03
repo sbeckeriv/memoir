@@ -76,7 +76,9 @@ pub async fn spawn_app() -> TestApp {
     };
 
     let sync_paused = Arc::new(AtomicBool::new(false));
-    let app = Application::build(config, embedder, sync_paused).await.expect("failed to build app");
+    let app = Application::build(config, embedder, sync_paused)
+        .await
+        .expect("failed to build app");
     let port = app.port();
     tokio::spawn(app.run_until_stopped());
 

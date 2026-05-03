@@ -162,22 +162,36 @@ impl LlmClient {
         }
     }
 
-    pub async fn generate(&self, prompt: &str, system_prompt: Option<&str>) -> anyhow::Result<String> {
+    pub async fn generate(
+        &self,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> anyhow::Result<String> {
         match self.provider {
             LlmProvider::Anthropic => self.generate_anthropic(prompt, system_prompt).await,
             _ => self.generate_openai(prompt, system_prompt).await,
         }
     }
 
-    async fn generate_openai(&self, prompt: &str, system_prompt: Option<&str>) -> anyhow::Result<String> {
+    async fn generate_openai(
+        &self,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> anyhow::Result<String> {
         let url = format!("{}/v1/chat/completions", self.base_url);
         debug!(url = %url, model = %self.model, "sending OpenAI-format LLM request");
 
         let mut messages = Vec::new();
         if let Some(sp) = system_prompt {
-            messages.push(ChatMessage { role: "system".to_string(), content: sp.to_string() });
+            messages.push(ChatMessage {
+                role: "system".to_string(),
+                content: sp.to_string(),
+            });
         }
-        messages.push(ChatMessage { role: "user".to_string(), content: prompt.to_string() });
+        messages.push(ChatMessage {
+            role: "user".to_string(),
+            content: prompt.to_string(),
+        });
 
         let mut req = self.client.post(&url).json(&ChatRequest {
             model: self.model.clone(),
@@ -211,7 +225,11 @@ impl LlmClient {
             .unwrap_or_default())
     }
 
-    async fn generate_anthropic(&self, prompt: &str, system_prompt: Option<&str>) -> anyhow::Result<String> {
+    async fn generate_anthropic(
+        &self,
+        prompt: &str,
+        system_prompt: Option<&str>,
+    ) -> anyhow::Result<String> {
         let url = format!("{}/v1/messages", self.base_url);
         debug!(url = %url, model = %self.model, "sending Anthropic messages request");
 

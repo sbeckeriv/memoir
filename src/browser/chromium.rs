@@ -38,7 +38,9 @@ impl BrowserHistory for ChromiumBrowser {
              ORDER BY last_visit_time DESC
              LIMIT ?1",
         )?;
-        Ok(stmt.query_map([limit], map_row)?.collect::<rusqlite::Result<_>>()?)
+        Ok(stmt
+            .query_map([limit], map_row)?
+            .collect::<rusqlite::Result<_>>()?)
     }
 
     fn top_sites(&self, conn: &Connection, limit: u32) -> anyhow::Result<Vec<HistoryItem>> {
@@ -48,7 +50,9 @@ impl BrowserHistory for ChromiumBrowser {
              ORDER BY visit_count DESC
              LIMIT ?1",
         )?;
-        Ok(stmt.query_map([limit], map_row)?.collect::<rusqlite::Result<_>>()?)
+        Ok(stmt
+            .query_map([limit], map_row)?
+            .collect::<rusqlite::Result<_>>()?)
     }
 }
 

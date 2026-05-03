@@ -6,7 +6,7 @@ use reqwest::Client;
 use tracing::{debug, warn};
 
 use crate::config::FetchSettings;
-use extract::{extract, is_auth_wall, ExtractedPage};
+use extract::{ExtractedPage, extract, is_auth_wall};
 
 #[derive(Debug)]
 pub enum FetchResult {
@@ -117,23 +117,38 @@ impl Fetcher {
             .await
         {
             Ok(r) => r.json().await.unwrap_or_default(),
-            Err(e) => { warn!(%url, error = %e, "wayback CDX request failed"); return None; }
+            Err(e) => {
+                warn!(%url, error = %e, "wayback CDX request failed");
+                return None;
+            }
         };
         // rows[0] is the header ["timestamp"], rows[1] is the data row.
         let timestamp = match rows.get(1).and_then(|r| r.first()) {
             Some(t) => t.clone(),
-            None => { debug!(%url, "no Wayback snapshot found in CDX"); return None; }
+            None => {
+                debug!(%url, "no Wayback snapshot found in CDX");
+                return None;
+            }
         };
         let snapshot_url = format!("https://web.archive.org/web/{}/{}", timestamp, url);
         debug!(%url, snapshot = %snapshot_url, "fetching Wayback snapshot");
         let snap_resp = match self.client.get(&snapshot_url).send().await {
             Ok(r) if r.status().is_success() => r,
-            Ok(r) => { warn!(%url, status = %r.status(), "wayback snapshot returned error"); return None; }
-            Err(e) => { warn!(%url, error = %e, "wayback snapshot fetch failed"); return None; }
+            Ok(r) => {
+                warn!(%url, status = %r.status(), "wayback snapshot returned error");
+                return None;
+            }
+            Err(e) => {
+                warn!(%url, error = %e, "wayback snapshot fetch failed");
+                return None;
+            }
         };
         let html = match snap_resp.text().await {
             Ok(h) => h,
-            Err(e) => { warn!(%url, error = %e, "wayback snapshot body read failed"); return None; }
+            Err(e) => {
+                warn!(%url, error = %e, "wayback snapshot body read failed");
+                return None;
+            }
         };
         let page = extract(&html);
         if page.body.is_empty() {

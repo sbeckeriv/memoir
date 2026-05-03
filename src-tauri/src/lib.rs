@@ -4,9 +4,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri_plugin_autostart::MacosLauncher;
 
 use tauri::{
+    Manager, WebviewUrl, WebviewWindowBuilder,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 // Injected into every page: intercepts external link clicks and routes them
@@ -42,7 +42,10 @@ pub fn run() {
     let sp_tray = sync_paused.clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -117,7 +120,9 @@ pub fn run() {
                                     .flatten()
                                     .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
 
-                            if let Err(e) = memoir::sync::run(&config, embedder, Some(log_init)).await {
+                            if let Err(e) =
+                                memoir::sync::run(&config, embedder, Some(log_init)).await
+                            {
                                 tracing::warn!(error = %e, "initial sync failed");
                             }
                         });
@@ -154,15 +159,16 @@ pub fn run() {
             let palette_url: url::Url = format!("http://127.0.0.1:{port}/palette")
                 .parse()
                 .expect("valid palette URL");
-            let palette_window = WebviewWindowBuilder::new(app, "palette", WebviewUrl::External(palette_url))
-                .title("")
-                .inner_size(680.0, 480.0)
-                .decorations(false)
-                .always_on_top(true)
-                .resizable(false)
-                .center()
-                .visible(false)
-                .build()?;
+            let palette_window =
+                WebviewWindowBuilder::new(app, "palette", WebviewUrl::External(palette_url))
+                    .title("")
+                    .inner_size(680.0, 480.0)
+                    .decorations(false)
+                    .always_on_top(true)
+                    .resizable(false)
+                    .center()
+                    .visible(false)
+                    .build()?;
             let pw = palette_window.clone();
             palette_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::Focused(false) = event {
@@ -188,12 +194,11 @@ pub fn run() {
                         continue;
                     }
 
-                    let embedder =
-                        tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
-                            .await
-                            .ok()
-                            .flatten()
-                            .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
+                    let embedder = tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
 
                     if let Err(e) = memoir::sync::run(&config, embedder, Some(log.clone())).await {
                         tracing::warn!(error = %e, "scheduled sync failed");
@@ -235,23 +240,45 @@ fn show_main_window(app: &tauri::AppHandle, port: u16, focus_search: bool) {
     }
 }
 
-fn build_tray(app: &tauri::App, sync_paused: Arc<AtomicBool>, port: u16, log: Arc<memoir::SessionLog>) -> tauri::Result<()> {
+fn build_tray(
+    app: &tauri::App,
+    sync_paused: Arc<AtomicBool>,
+    port: u16,
+    log: Arc<memoir::SessionLog>,
+) -> tauri::Result<()> {
     use tauri_plugin_autostart::ManagerExt;
 
     let is_autolaunching = app.autolaunch().is_enabled().unwrap_or(false);
-    let autolaunch_label = if is_autolaunching { "✓ Launch at Login" } else { "Launch at Login" };
+    let autolaunch_label = if is_autolaunching {
+        "✓ Launch at Login"
+    } else {
+        "Launch at Login"
+    };
 
-    let open       = MenuItem::with_id(app, "open",        "Open Memoir",         true, None::<&str>)?;
-    let search     = MenuItem::with_id(app, "search",      "Search…",             true, None::<&str>)?;
-    let sep1       = PredefinedMenuItem::separator(app)?;
-    let index_now  = MenuItem::with_id(app, "index_now",   "Index Now",           true, None::<&str>)?;
-    let pause_idx  = MenuItem::with_id(app, "pause_index", "Pause Indexing",      true, None::<&str>)?;
-    let sep2       = PredefinedMenuItem::separator(app)?;
-    let autolaunch = MenuItem::with_id(app, "autolaunch",  autolaunch_label,      true, None::<&str>)?;
-    let sep3       = PredefinedMenuItem::separator(app)?;
-    let quit       = MenuItem::with_id(app, "quit",        "Quit",                true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Memoir", true, None::<&str>)?;
+    let search = MenuItem::with_id(app, "search", "Search…", true, None::<&str>)?;
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    let index_now = MenuItem::with_id(app, "index_now", "Index Now", true, None::<&str>)?;
+    let pause_idx = MenuItem::with_id(app, "pause_index", "Pause Indexing", true, None::<&str>)?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let autolaunch = MenuItem::with_id(app, "autolaunch", autolaunch_label, true, None::<&str>)?;
+    let sep3 = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&open, &search, &sep1, &index_now, &pause_idx, &sep2, &autolaunch, &sep3, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &open,
+            &search,
+            &sep1,
+            &index_now,
+            &pause_idx,
+            &sep2,
+            &autolaunch,
+            &sep3,
+            &quit,
+        ],
+    )?;
 
     let pause_item = pause_idx.clone();
     let autolaunch_item = autolaunch.clone();
@@ -269,12 +296,11 @@ fn build_tray(app: &tauri::App, sync_paused: Arc<AtomicBool>, port: u16, log: Ar
                 let log_tray = log.clone();
                 tauri::async_runtime::spawn(async move {
                     let config = memoir::Settings::load();
-                    let embedder =
-                        tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
-                            .await
-                            .ok()
-                            .flatten()
-                            .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
+                    let embedder = tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
 
                     if let Err(e) = memoir::sync::run(&config, embedder, Some(log_tray)).await {
                         tracing::warn!(error = %e, "manual index failed");
@@ -284,7 +310,11 @@ fn build_tray(app: &tauri::App, sync_paused: Arc<AtomicBool>, port: u16, log: Ar
 
             "pause_index" => {
                 let was_paused = sync_paused.fetch_xor(true, Ordering::SeqCst);
-                let new_label = if was_paused { "Pause Indexing" } else { "Resume Indexing" };
+                let new_label = if was_paused {
+                    "Pause Indexing"
+                } else {
+                    "Resume Indexing"
+                };
                 let _ = pause_item.set_text(new_label);
             }
 

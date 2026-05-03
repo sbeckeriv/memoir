@@ -9,7 +9,12 @@ use crate::fetch::{FetchResult, Fetcher};
 use crate::index::{FetchStatus, IndexStore};
 use crate::session_log::{LogKind, SessionLog};
 
-fn slog(log: &Option<Arc<SessionLog>>, kind: LogKind, msg: impl Into<String>, detail: impl Into<Option<String>>) {
+fn slog(
+    log: &Option<Arc<SessionLog>>,
+    kind: LogKind,
+    msg: impl Into<String>,
+    detail: impl Into<Option<String>>,
+) {
     if let Some(l) = log {
         l.push(kind, msg, detail);
     }
@@ -52,7 +57,12 @@ pub async fn run(
 
     let urls = if db_changed {
         info!(history_db = %config.browser.history_db_path.display(), "browser DB changed, syncing visits");
-        slog(&log, LogKind::Sync, "Browser history changed — reading new visits", None);
+        slog(
+            &log,
+            LogKind::Sync,
+            "Browser history changed — reading new visits",
+            None,
+        );
         let snapshot = browser::copy_db(&config.browser.history_db_path)?;
         debug!(tmp = %snapshot.path().display(), "browser DB snapshot ready");
 
@@ -99,7 +109,12 @@ pub async fn run(
         urls
     } else {
         debug!("browser DB unchanged, skipping visit registration");
-        slog(&log, LogKind::Sync, "Browser history unchanged — checking for pending pages", None);
+        slog(
+            &log,
+            LogKind::Sync,
+            "Browser history unchanged — checking for pending pages",
+            None,
+        );
         let index = index.clone();
         let fetch_batch = config.sync.fetch_batch;
         tokio::task::spawn_blocking(move || index.urls_needing_fetch(fetch_batch)).await??
@@ -109,14 +124,20 @@ pub async fn run(
     if urls.is_empty() {
         slog(&log, LogKind::Sync, "No pages to fetch", None);
     } else {
-        slog(&log, LogKind::Sync, format!("Fetching {} page(s)", urls.len()), None);
+        slog(
+            &log,
+            LogKind::Sync,
+            format!("Fetching {} page(s)", urls.len()),
+            None,
+        );
     }
 
     for url in urls {
         if config.fetch.is_banned(&url) {
             let index = index.clone();
             let url2 = url.clone();
-            tokio::task::spawn_blocking(move || index.mark_status(&url2, FetchStatus::Skip)).await??;
+            tokio::task::spawn_blocking(move || index.mark_status(&url2, FetchStatus::Skip))
+                .await??;
             debug!(%url, "skipping banned URL");
             continue;
         }
@@ -154,10 +175,17 @@ pub async fn run(
             FetchResult::AuthWall => {
                 let index = index.clone();
                 let url2 = url.clone();
-                tokio::task::spawn_blocking(move || index.mark_status(&url2, FetchStatus::AuthWall))
-                    .await??;
+                tokio::task::spawn_blocking(move || {
+                    index.mark_status(&url2, FetchStatus::AuthWall)
+                })
+                .await??;
                 warn!(%url, "auth wall, skipping");
-                slog(&log, LogKind::Sync, format!("Skipped (auth wall): {url}"), None);
+                slog(
+                    &log,
+                    LogKind::Sync,
+                    format!("Skipped (auth wall): {url}"),
+                    None,
+                );
             }
             FetchResult::Skip => {
                 let index = index.clone();
@@ -169,9 +197,15 @@ pub async fn run(
                 let index = index.clone();
                 let url2 = url.clone();
                 let max_retries = config.fetch.max_retries;
-                tokio::task::spawn_blocking(move || index.record_fetch_error(&url2, max_retries)).await??;
+                tokio::task::spawn_blocking(move || index.record_fetch_error(&url2, max_retries))
+                    .await??;
                 warn!(%url, error = %e, "fetch error, will retry next sync (up to 3 attempts)");
-                slog(&log, LogKind::Error, format!("Fetch error: {url}"), Some(e.to_string()));
+                slog(
+                    &log,
+                    LogKind::Error,
+                    format!("Fetch error: {url}"),
+                    Some(e.to_string()),
+                );
             }
         }
     }
@@ -185,7 +219,12 @@ pub async fn run(
         };
         info!("embedding {} pages", to_embed.len());
         if !to_embed.is_empty() {
-            slog(&log, LogKind::Sync, format!("Embedding {} page(s)", to_embed.len()), None);
+            slog(
+                &log,
+                LogKind::Sync,
+                format!("Embedding {} page(s)", to_embed.len()),
+                None,
+            );
         }
 
         let mut embed_ok = 0usize;
@@ -206,22 +245,41 @@ pub async fn run(
                 }
                 Ok(Err(e)) => {
                     warn!(%url, error = %e, "embedding failed");
-                    slog(&log, LogKind::Error, format!("Embed error: {url}"), Some(e.to_string()));
+                    slog(
+                        &log,
+                        LogKind::Error,
+                        format!("Embed error: {url}"),
+                        Some(e.to_string()),
+                    );
                 }
                 Err(e) => {
                     warn!(%url, error = %e, "embedding task panicked");
-                    slog(&log, LogKind::Error, format!("Embed panic: {url}"), Some(e.to_string()));
+                    slog(
+                        &log,
+                        LogKind::Error,
+                        format!("Embed panic: {url}"),
+                        Some(e.to_string()),
+                    );
                 }
             }
         }
         if embed_ok > 0 {
-            slog(&log, LogKind::Sync, format!("Embedding complete — {embed_ok} page(s) embedded"), None);
+            slog(
+                &log,
+                LogKind::Sync,
+                format!("Embedding complete — {embed_ok} page(s) embedded"),
+                None,
+            );
         }
     } else {
-        slog(&log, LogKind::Sync, "Semantic indexing skipped (no embedding model)", None);
+        slog(
+            &log,
+            LogKind::Sync,
+            "Semantic indexing skipped (no embedding model)",
+            None,
+        );
     }
 
     slog(&log, LogKind::Sync, "Sync complete", None);
     Ok(())
 }
-

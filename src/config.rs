@@ -77,7 +77,10 @@ pub struct ApplicationSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BrowserSettings {
-    #[serde(serialize_with = "serialize_path", deserialize_with = "deserialize_expanded_path")]
+    #[serde(
+        serialize_with = "serialize_path",
+        deserialize_with = "deserialize_expanded_path"
+    )]
     pub history_db_path: PathBuf,
     pub kind: BrowserKind,
 }
@@ -85,7 +88,10 @@ pub struct BrowserSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DataSettings {
-    #[serde(serialize_with = "serialize_path", deserialize_with = "deserialize_expanded_path")]
+    #[serde(
+        serialize_with = "serialize_path",
+        deserialize_with = "deserialize_expanded_path"
+    )]
     pub dir: PathBuf,
 }
 
@@ -122,15 +128,19 @@ pub struct SyncSettings {
 
 impl Default for ApplicationSettings {
     fn default() -> Self {
-        Self { host: "127.0.0.1".to_string(), port: 3000, ui_poll_secs: 30, custom_css: String::new() }
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+            ui_poll_secs: 30,
+            custom_css: String::new(),
+        }
     }
 }
 
 impl Default for BrowserSettings {
     fn default() -> Self {
         Self {
-            history_db_path: home_dir()
-                .join("Library/Application Support/Orion/Defaults/history"),
+            history_db_path: home_dir().join("Library/Application Support/Orion/Defaults/history"),
             kind: BrowserKind::Orion,
         }
     }
@@ -138,7 +148,9 @@ impl Default for BrowserSettings {
 
 impl Default for DataSettings {
     fn default() -> Self {
-        Self { dir: home_dir().join(".memoir") }
+        Self {
+            dir: home_dir().join(".memoir"),
+        }
     }
 }
 
@@ -209,7 +221,11 @@ impl Default for LlmSettings {
 
 impl Default for SyncSettings {
     fn default() -> Self {
-        Self { interval_mins: 60, fetch_batch: 500, embed_batch: 200 }
+        Self {
+            interval_mins: 60,
+            fetch_batch: 500,
+            embed_batch: 200,
+        }
     }
 }
 

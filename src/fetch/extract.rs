@@ -27,7 +27,14 @@ fn extract_title(doc: &Html) -> String {
 
 fn extract_body(doc: &Html) -> String {
     // Prefer semantic content containers; fall back to full body.
-    for sel_str in &["main", "article", "[role='main']", "#content", "#main", "body"] {
+    for sel_str in &[
+        "main",
+        "article",
+        "[role='main']",
+        "#content",
+        "#main",
+        "body",
+    ] {
         if let Ok(sel) = Selector::parse(sel_str) {
             if let Some(el) = doc.select(&sel).next() {
                 let text = el
@@ -70,7 +77,8 @@ mod tests {
 
     #[test]
     fn normalises_whitespace_in_title() {
-        let page = extract("<html><head><title>  Hello\n  World  </title></head><body>x</body></html>");
+        let page =
+            extract("<html><head><title>  Hello\n  World  </title></head><body>x</body></html>");
         assert_eq!(page.title, "Hello World");
     }
 
@@ -110,6 +118,9 @@ mod tests {
             "https://example.com/secure",
             r#"<form><input type="password" name="pw"></form>"#
         ));
-        assert!(!is_auth_wall("https://example.com/about", "<p>No forms here</p>"));
+        assert!(!is_auth_wall(
+            "https://example.com/about",
+            "<p>No forms here</p>"
+        ));
     }
 }
