@@ -426,7 +426,7 @@ async function load() {
 async function toggleStar(btn) {
   const row = btn.closest('tr');
   const url = row.dataset.url;
-  const nowStarred = row.dataset.starred === 'true' ? false : true;
+  const nowStarred = row.dataset.starred !== 'true';
   await fetch(`/api/star?url=${encodeURIComponent(url)}&starred=${nowStarred}`, { method: 'POST' });
   row.dataset.starred = nowStarred;
   btn.textContent = nowStarred ? '★' : '☆';

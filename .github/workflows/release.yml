@@ -85,19 +85,14 @@ jobs:
           REPO="${{ github.repository }}"
           URL="https://github.com/${REPO}/releases/download/${TAG}/${{ steps.artifacts.outputs.tar_name }}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          cat > latest.json << EOF
-          {
-            "version": "${{ steps.version.outputs.version }}",
-            "notes": "See release notes at https://github.com/${REPO}/releases/tag/${TAG}",
-            "pub_date": "${PUB_DATE}",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "${SIG}",
-                "url": "${URL}"
-              }
-            }
-          }
-          EOF
+          jq -n \
+            --arg version "${{ steps.version.outputs.version }}" \
+            --arg notes "See release notes at https://github.com/${REPO}/releases/tag/${TAG}" \
+            --arg pub_date "${PUB_DATE}" \
+            --arg sig "${SIG}" \
+            --arg url "${URL}" \
+            '{version:$version,notes:$notes,pub_date:$pub_date,platforms:{"darwin-aarch64":{signature:$sig,url:$url}}}' \
+            > latest.json
 
       - name: Create GitHub release
         if: steps.check.outputs.exists == 'false'

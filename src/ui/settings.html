@@ -421,16 +421,11 @@ const DEFAULT_PATHS = {
   },
 };
 
-function detectOs() {
-  const ua = navigator.userAgent;
-  if (ua.includes('Win')) return 'windows';
-  if (ua.includes('Mac')) return 'mac';
-  return 'linux';
-}
+const OS = navigator.userAgent.includes('Win') ? 'windows' : navigator.userAgent.includes('Mac') ? 'mac' : 'linux';
 
 function updateBrowserHint() {
   const kind = document.getElementById('browser-kind').value;
-  const os = detectOs();
+  const os = OS;
   const path = DEFAULT_PATHS[os]?.[kind] ?? '';
   const hint = document.getElementById('browser-default-path');
   hint.textContent = path ? 'Default: ' + path : '';

@@ -797,14 +797,16 @@ function renderCluster(c) {
   const showMore = extra > 0
     ? `<button class="cluster-show-more" onclick="expandClusterPages(this, ${JSON.stringify(pages.slice(PREVIEW).map(p => ({url:p.url, title:p.title})))})">+ ${extra} more pages</button>`
     : '';
+  const sc = scoreClass(c.score);
+  const scoreTooltips = { 'score-high': 'Pages in this topic were tightly focused on one topic', 'score-mid': 'Pages in this topic had moderate topic overlap', 'score-low': 'Pages in this topic covered mixed topics' };
   return `<div class="cluster-row" data-fp="${fp}">
     <div class="cluster-header" onclick="this.closest('.cluster-row').classList.toggle('open')">
       <span class="cluster-label">${esc(c.label)}</span>
-      <span class="cluster-score ${scoreClass(c.score)}" data-tooltip="${scoreClass(c.score) === 'score-high' ? 'Pages in this session were tightly focused on one topic' : scoreClass(c.score) === 'score-mid' ? 'Pages in this session had moderate topic overlap' : 'Pages in this session covered mixed topics'}">${scorePct}%</span>
+      <span class="cluster-score ${sc}" data-tooltip="${scoreTooltips[sc]}">${scorePct}%</span>
       <span class="cluster-meta">${esc(meta)}</span>
       <span class="cluster-toggle">▾</span>
-      <button class="icon-btn" title="Dismiss this session"
-        onclick="event.stopPropagation(); dismissCluster('${fp}')" title="Dismiss this topic">✕</button>
+      <button class="icon-btn" title="Dismiss this topic"
+        onclick="event.stopPropagation(); dismissCluster('${fp}')">✕</button>
     </div>
     <div class="cluster-body">
       <div class="cluster-domains">${domains}</div>

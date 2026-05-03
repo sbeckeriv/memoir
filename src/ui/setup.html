@@ -476,28 +476,20 @@ function home() {
 }
 
 async function init() {
-  // Set data dir default
-  const h = (await detectHome()) || '';
-  document.getElementById('data-dir').value = h ? h + '/.memoir' : '~/.memoir';
-
-  // Detect browsers
+  let browsers = [];
   try {
-    const browsers = await (await fetch('/api/setup/detect')).json();
-    renderBrowserList(browsers);
+    browsers = await (await fetch('/api/setup/detect')).json();
   } catch {
     document.getElementById('browser-list').innerHTML =
       '<p style="color:var(--muted);font-size:13px">Could not auto-detect browsers. Enter a custom path below.</p>';
   }
-}
 
-async function detectHome() {
-  // Ask the detect endpoint; the first browser path gives us the home prefix
-  try {
-    const b = await (await fetch('/api/setup/detect')).json();
-    const p = b[0]?.path || '';
-    const match = p.match(/^(\/Users\/[^/]+)\//);
-    return match ? match[1] : '';
-  } catch { return ''; }
+  const p = browsers[0]?.path || '';
+  const match = p.match(/^(\/Users\/[^/]+)\//);
+  const h = match ? match[1] : '';
+  document.getElementById('data-dir').value = h ? h + '/.memoir' : '~/.memoir';
+
+  if (browsers.length) renderBrowserList(browsers);
 }
 
 function renderBrowserList(browsers) {
