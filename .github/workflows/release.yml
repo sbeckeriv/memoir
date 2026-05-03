@@ -15,7 +15,7 @@ on:
 
 jobs:
   release-macos:
-    name: Build macOS universal binary
+    name: Build macOS Apple Silicon binary
     runs-on: macos-latest
     permissions:
       contents: write
@@ -27,7 +27,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -44,15 +44,15 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
 
-      - name: Build universal macOS app
-        run: cargo tauri build --target universal-apple-darwin
+      - name: Build macOS app
+        run: cargo tauri build --target aarch64-apple-darwin
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
 
       - name: Locate DMG artifact
         id: dmg
         run: |
-          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          DMG=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
           echo "path=$DMG" >> "$GITHUB_OUTPUT"
           echo "name=$(basename $DMG)" >> "$GITHUB_OUTPUT"
 
@@ -75,5 +75,5 @@ jobs:
 
             ---
 
-            **Universal binary** — runs natively on both Apple Silicon (M1/M2/M3) and Intel Macs.
+            **Apple Silicon** — requires an M-series Mac (M1 or later).
           files: ${{ steps.dmg.outputs.path }}
