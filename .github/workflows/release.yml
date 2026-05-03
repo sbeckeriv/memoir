@@ -32,9 +32,7 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            . -> target
-            src-tauri -> src-tauri/target
+          workspaces: . -> target
 
       - name: Install Node (required by Tauri CLI)
         uses: actions/setup-node@v4
@@ -52,7 +50,7 @@ jobs:
       - name: Locate DMG artifact
         id: dmg
         run: |
-          DMG=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          DMG=$(find target -name "*.dmg" | head -1)
           echo "path=$DMG" >> "$GITHUB_OUTPUT"
           echo "name=$(basename $DMG)" >> "$GITHUB_OUTPUT"
 
