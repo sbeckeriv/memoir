@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -50,11 +50,11 @@ where
     PathBuf::deserialize(d).map(expand_tilde)
 }
 
-fn serialize_path<S: serde::Serializer>(path: &PathBuf, s: S) -> Result<S::Ok, S::Error> {
+fn serialize_path<S: serde::Serializer>(path: &Path, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(&path.to_string_lossy())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub application: ApplicationSettings,
@@ -229,18 +229,6 @@ impl Default for SyncSettings {
     }
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            application: ApplicationSettings::default(),
-            browser: BrowserSettings::default(),
-            data: DataSettings::default(),
-            fetch: FetchSettings::default(),
-            llm: LlmSettings::default(),
-            sync: SyncSettings::default(),
-        }
-    }
-}
 
 impl FetchSettings {
     pub fn is_banned(&self, url: &str) -> bool {
@@ -318,7 +306,7 @@ pub fn host_from_url(url: &str) -> &str {
         .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
     let end = after_scheme
-        .find(|c| matches!(c, '/' | '?' | '#'))
+        .find(['/', '?', '#'])
         .unwrap_or(after_scheme.len());
     let authority = &after_scheme[..end];
     match authority.rsplit_once(':') {

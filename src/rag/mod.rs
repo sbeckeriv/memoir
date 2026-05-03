@@ -90,7 +90,7 @@ impl LlmClient {
     pub fn new(settings: &LlmSettings) -> Self {
         Self {
             client: Client::new(),
-            provider: settings.provider.clone(),
+            provider: settings.provider,
             base_url: settings.base_url.clone(),
             model: settings.model.clone(),
             api_key: settings.api_key.clone(),

@@ -236,7 +236,7 @@ fn host_from_url(url: &str) -> Option<&str> {
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
     let end = after
-        .find(|c| matches!(c, '/' | '?' | '#'))
+        .find(['/', '?', '#'])
         .unwrap_or(after.len());
     let authority = &after[..end];
     let host = match authority.rsplit_once(':') {

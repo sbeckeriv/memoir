@@ -50,15 +50,15 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
-                    if event.state() == ShortcutState::Pressed {
-                        if let Some(palette) = app.get_webview_window("palette") {
-                            if palette.is_visible().unwrap_or(false) {
-                                palette.hide().ok();
-                            } else {
-                                palette.show().ok();
-                                palette.set_focus().ok();
-                                let _ = palette.eval("clearPalette()");
-                            }
+                    if event.state() == ShortcutState::Pressed
+                        && let Some(palette) = app.get_webview_window("palette")
+                    {
+                        if palette.is_visible().unwrap_or(false) {
+                            palette.hide().ok();
+                        } else {
+                            palette.show().ok();
+                            palette.set_focus().ok();
+                            let _ = palette.eval("clearPalette()");
                         }
                     }
                 })
@@ -86,6 +86,7 @@ pub fn run() {
 
             // Channel to receive the bound port from the async server task.
             let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
+            let (log_tx, log_rx) = std::sync::mpsc::channel::<Arc<memoir::SessionLog>>();
 
             // Start Axum server without waiting for embedder (fast startup).
             // Sync + embedding runs in a separate background task afterward.
@@ -98,6 +99,7 @@ pub fn run() {
                         port_tx.send(port).ok();
 
                         let log = server.log.clone();
+                        log_tx.send(log.clone()).ok();
 
                         // Drive palette hide signals from Axum to the Tauri window.
                         let palette_notify = server.palette_hide();
@@ -142,6 +144,9 @@ pub fn run() {
             let port = port_rx
                 .recv_timeout(std::time::Duration::from_secs(15))
                 .unwrap_or(3000);
+            let log = log_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .unwrap_or_else(|_| Arc::new(memoir::SessionLog::new()));
 
             let startup_path = if config_exists { "/" } else { "/setup" };
             let url: url::Url = format!("http://127.0.0.1:{port}{startup_path}")
@@ -180,7 +185,7 @@ pub fn run() {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             app.global_shortcut().register("CmdOrCtrl+Shift+Space")?;
 
-            build_tray(app, sp_tray, port, log)?;
+            build_tray(app, sp_tray, port, log.clone())?;
 
             // Background sync loop — interval is re-read from config each cycle.
             tauri::async_runtime::spawn(async move {

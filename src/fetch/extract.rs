@@ -35,17 +35,17 @@ fn extract_body(doc: &Html) -> String {
         "#main",
         "body",
     ] {
-        if let Ok(sel) = Selector::parse(sel_str) {
-            if let Some(el) = doc.select(&sel).next() {
-                let text = el
-                    .text()
-                    .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
-                    .filter(|t| !t.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                if text.len() > 50 {
-                    return text;
-                }
+        if let Ok(sel) = Selector::parse(sel_str)
+            && let Some(el) = doc.select(&sel).next()
+        {
+            let text = el
+                .text()
+                .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
+                .filter(|t| !t.is_empty())
+                .collect::<Vec<_>>()
+                .join(" ");
+            if text.len() > 50 {
+                return text;
             }
         }
     }

@@ -85,7 +85,7 @@ impl SessionLog {
             .chain(inner.error.iter())
             .cloned()
             .collect();
-        all.sort_by(|a, b| b.ts.cmp(&a.ts));
+        all.sort_by_key(|b| std::cmp::Reverse(b.ts));
         all
     }
 

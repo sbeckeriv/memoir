@@ -733,13 +733,13 @@ pub async fn setup_test_llm(Query(params): Query<TestLlmParams>) -> Json<TestLlm
     let base = params.base_url.trim_end_matches('/');
     for ep in &["/v1/models", "/api/tags", "/health"] {
         let url = format!("{base}{ep}");
-        if let Ok(resp) = client.get(&url).send().await {
-            if resp.status().is_success() {
-                return Json(TestLlmResult {
-                    ok: true,
-                    message: format!("Connected ({ep})"),
-                });
-            }
+        if let Ok(resp) = client.get(&url).send().await
+            && resp.status().is_success()
+        {
+            return Json(TestLlmResult {
+                ok: true,
+                message: format!("Connected ({ep})"),
+            });
         }
     }
     Json(TestLlmResult {
@@ -777,10 +777,10 @@ pub async fn setup_save(Json(payload): Json<SetupPayload>) -> Result<StatusCode,
         esc(&payload.llm_base_url),
         esc(&payload.llm_model),
     );
-    if let Some(key) = &payload.llm_api_key {
-        if !key.is_empty() {
-            llm_section.push_str(&format!("api_key = \"{}\"\n", esc(key)));
-        }
+    if let Some(key) = &payload.llm_api_key
+        && !key.is_empty()
+    {
+        llm_section.push_str(&format!("api_key = \"{}\"\n", esc(key)));
     }
 
     let browser_kind = if payload.browser_kind.is_empty() {

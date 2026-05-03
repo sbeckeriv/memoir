@@ -1,0 +1,26 @@
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "cargo-fmt"
+name = "cargo fmt"
+entry = "cargo fmt"
+language = "system"
+pass_filenames = false
+files = "\\.rs$"
+
+[[repos.hooks]]
+id = "cargo-clippy"
+name = "cargo clippy"
+entry = "cargo clippy -- -D warnings"
+language = "system"
+pass_filenames = false
+files = "\\.rs$"
+
+[[repos.hooks]]
+id = "cargo-test"
+name = "cargo test"
+entry = "cargo test"
+language = "system"
+pass_filenames = false
+stages = ["pre-push"]
