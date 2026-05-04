@@ -290,7 +290,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
   <div class="card">
     <div class="field">
       <label>Export all indexed pages</label>
-      <a class="btn btn-secondary" href="/api/export/all" download>Export backup</a>
+      <button class="btn btn-secondary" onclick="exportBackup()">Export backup</button>
     </div>
     <div class="field">
       <label for="import-file">Import backup</label>
@@ -464,6 +464,20 @@ function updateBrowserHint() {
 }
 
 document.getElementById('browser-kind').addEventListener('change', updateBrowserHint);
+
+async function exportBackup() {
+  const r = await fetch('/api/export/all');
+  if (!r.ok) { showToast('Export failed', true); return; }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'memoir-backup.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 function showToast(msg, error = false) {
   const t = document.getElementById('toast');

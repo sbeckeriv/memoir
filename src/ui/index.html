@@ -471,6 +471,22 @@ main {
   padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 4px;
 }
 .cluster-tab.active { color: #5b8af4; background: rgba(91,138,244,0.1); }
+
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: none; align-items: center; justify-content: center; z-index: 200;
+}
+.confirm-overlay.show { display: flex; }
+.confirm-box {
+  background: #fff; border-radius: 10px; padding: 1.5rem;
+  max-width: 380px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.confirm-msg { font-size: 0.9rem; color: #333; margin-bottom: 1.25rem; white-space: pre-wrap; }
+.confirm-btns { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.confirm-cancel { background: #e8e8ee; color: #333; border: none; border-radius: 6px; padding: 0.45rem 1rem; font-size: 0.85rem; cursor: pointer; }
+.confirm-ok { background: #ef4444; color: #fff; border: none; border-radius: 6px; padding: 0.45rem 1rem; font-size: 0.85rem; cursor: pointer; }
+.confirm-cancel:hover { background: #d5d5de; }
+.confirm-ok:hover { background: #dc2626; }
 </style>
 <link rel="stylesheet" href="/api/custom-css">
 </head>
@@ -762,7 +778,7 @@ async function toggleResultStar(btn) {
 async function deleteResult(btn) {
   const row = btn.closest('.result-item');
   const url = row.dataset.url;
-  if (!confirm(`Delete from index?\n\n${url}`)) return;
+  if (!await confirmDialog(`Delete from index?\n\n${url}`)) return;
   const r = await fetch(`/api/page?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
   if (r.ok || r.status === 204) { row.remove(); }
 }
@@ -1022,7 +1038,7 @@ function dismissCluster(fp) {
 }
 
 async function hideTopic(domain, btn) {
-  if (!confirm(`Hide all future topics dominated by ${domain}?\n\nYou can undo this in Manage.`)) return;
+  if (!await confirmDialog(`Hide all future topics dominated by ${domain}?\n\nYou can undo this in Manage.`)) return;
   btn.disabled = true;
   btn.textContent = 'Hiding…';
   await fetch(`/api/clusters/ignore?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
@@ -1045,6 +1061,35 @@ function expandClusterPages(btn, extraPages) {
   });
   btn.remove();
 }
+
+function confirmDialog(msg) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-overlay');
+    document.getElementById('confirm-msg').textContent = msg;
+    overlay.classList.add('show');
+    const okBtn = document.getElementById('confirm-ok');
+    const cancelBtn = document.getElementById('confirm-cancel');
+    function done(result) {
+      overlay.classList.remove('show');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk() { done(true); }
+    function onCancel() { done(false); }
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
 </script>
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-msg" id="confirm-msg"></div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" id="confirm-cancel">Cancel</button>
+      <button class="confirm-ok" id="confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

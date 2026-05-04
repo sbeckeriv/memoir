@@ -745,12 +745,13 @@ pub async fn setup_detect() -> Json<Vec<DetectedBrowser>> {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("/"));
 
-    let candidates = vec![
+    let mut candidates: Vec<(&str, &str, std::path::PathBuf)> = vec![
         (
             "Orion",
             "orion",
             home.join("Library/Application Support/Orion/Defaults/history"),
         ),
+        ("Safari", "safari", home.join("Library/Safari/History.db")),
         (
             "Chrome",
             "chrome",
@@ -772,6 +773,26 @@ pub async fn setup_detect() -> Json<Vec<DetectedBrowser>> {
             home.join("Library/Application Support/Microsoft Edge/Default/History"),
         ),
     ];
+
+    // Firefox profiles have a randomised directory name — pick the most recently modified one.
+    let firefox_path = {
+        let profiles_dir = home.join("Library/Application Support/Firefox/Profiles");
+        std::fs::read_dir(&profiles_dir)
+            .ok()
+            .and_then(|entries| {
+                entries
+                    .flatten()
+                    .filter_map(|e| {
+                        let p = e.path().join("places.sqlite");
+                        let modified = std::fs::metadata(&p).and_then(|m| m.modified()).ok()?;
+                        Some((modified, p))
+                    })
+                    .max_by_key(|(m, _)| *m)
+                    .map(|(_, p)| p)
+            })
+            .unwrap_or_else(|| profiles_dir.join("default/places.sqlite"))
+    };
+    candidates.push(("Firefox", "firefox", firefox_path));
 
     let browsers = candidates
         .into_iter()

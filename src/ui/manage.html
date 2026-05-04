@@ -247,6 +247,22 @@ td {
 }
 .toast.show { opacity: 1; }
 
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  display: none; align-items: center; justify-content: center; z-index: 200;
+}
+.confirm-overlay.show { display: flex; }
+.confirm-box {
+  background: #fff; border-radius: 10px; padding: 1.5rem;
+  max-width: 380px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.confirm-msg { font-size: 0.9rem; color: #333; margin-bottom: 1.25rem; white-space: pre-wrap; }
+.confirm-btns { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.confirm-cancel { background: #e8e8ee; color: #333; border: none; border-radius: 6px; padding: 0.45rem 1rem; font-size: 0.85rem; cursor: pointer; }
+.confirm-ok { background: #ef4444; color: #fff; border: none; border-radius: 6px; padding: 0.45rem 1rem; font-size: 0.85rem; cursor: pointer; }
+.confirm-cancel:hover { background: #d5d5de; }
+.confirm-ok:hover { background: #dc2626; }
+
 .sync-card {
   display: flex;
   align-items: center;
@@ -340,6 +356,15 @@ td {
 </main>
 
 <div class="toast" id="toast"></div>
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-msg" id="confirm-msg"></div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" id="confirm-cancel">Cancel</button>
+      <button class="confirm-ok" id="confirm-ok">Confirm</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const LIMIT = 50;
@@ -356,6 +381,26 @@ function esc(s) {
 
 function hostOf(url) {
   try { return new URL(url).hostname; } catch { return ''; }
+}
+
+function confirmDialog(msg) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-overlay');
+    document.getElementById('confirm-msg').textContent = msg;
+    overlay.classList.add('show');
+    const okBtn = document.getElementById('confirm-ok');
+    const cancelBtn = document.getElementById('confirm-cancel');
+    function done(result) {
+      overlay.classList.remove('show');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk() { done(true); }
+    function onCancel() { done(false); }
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
 }
 
 function showToast(msg) {
@@ -444,7 +489,7 @@ async function toggleStar(btn) {
 async function deletePage(btn) {
   const row = btn.closest('tr');
   const url = row.dataset.url;
-  if (!confirm(`Delete this page from the index?\n\n${url}`)) return;
+  if (!await confirmDialog(`Delete this page from the index?\n\n${url}`)) return;
   const r = await fetch(`/api/page?url=${encodeURIComponent(url)}`, { method: 'DELETE' });
   if (r.ok || r.status === 204) {
     row.remove();
@@ -457,7 +502,7 @@ async function deletePage(btn) {
 async function deleteHost(btn) {
   const row = btn.closest('tr');
   const host = row.dataset.host;
-  if (!confirm(`Delete all pages from "${host}" from the index?\n(The domain will not be banned.)`)) return;
+  if (!await confirmDialog(`Delete all pages from "${host}" from the index?\n(The domain will not be banned.)`)) return;
   const r = await fetch(`/api/host?host=${encodeURIComponent(host)}`, { method: 'DELETE' });
   if (r.ok) {
     document.querySelectorAll(`tr[data-host="${CSS.escape(host)}"]`).forEach(r => r.remove());
@@ -477,7 +522,7 @@ async function reindexPage(btn) {
 async function banHost(btn) {
   const row = btn.closest('tr');
   const host = row.dataset.host;
-  if (!confirm(`Ban "${host}" and delete ALL its indexed pages?`)) return;
+  if (!await confirmDialog(`Ban "${host}" and delete ALL its indexed pages?`)) return;
   const r = await fetch(`/api/ban?host=${encodeURIComponent(host)}`, { method: 'POST' });
   if (r.ok) {
     const data = await r.json();

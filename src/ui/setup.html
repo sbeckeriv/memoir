@@ -378,6 +378,7 @@
       <div class="field">
         <label class="label">Custom path <span class="label-hint">optional — paste the path to your browser's History file</span></label>
         <input class="input" id="custom-path" placeholder="/Users/you/Library/Application Support/…/History" />
+        <div class="status-err" id="step1-err" style="margin-top:6px"></div>
       </div>
       <div class="actions">
         <span></span>
@@ -427,6 +428,7 @@
       <div class="field">
         <label class="label">Storage location</label>
         <input class="input" id="data-dir" />
+        <div class="status-err" id="step3-err" style="margin-top:6px"></div>
       </div>
 
       <div class="actions">
@@ -444,6 +446,7 @@
 
       <table class="summary-table" id="summary-table"></table>
 
+      <div class="status-err" id="finish-err" style="margin-bottom:12px"></div>
       <div class="actions">
         <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
         <div class="actions-right">
@@ -558,12 +561,14 @@ function validateStep(n) {
   if (n === 1) {
     const custom = document.getElementById('custom-path').value.trim();
     if (custom) selectedBrowserPath = custom;
-    if (!selectedBrowserPath) { alert('Please select or enter a browser history path.'); return false; }
+    if (!selectedBrowserPath) { document.getElementById('step1-err').textContent = 'Please select or enter a browser history path.'; return false; }
+    document.getElementById('step1-err').textContent = '';
   }
   if (n === 3) {
     if (!document.getElementById('data-dir').value.trim()) {
-      alert('Please enter a data directory.'); return false;
+      document.getElementById('step3-err').textContent = 'Please enter a data directory.'; return false;
     }
+    document.getElementById('step3-err').textContent = '';
   }
   return true;
 }
@@ -609,6 +614,7 @@ async function finishSetup() {
   const btn = document.getElementById('finish-btn');
   btn.disabled = true;
   btn.textContent = 'Saving…';
+  document.getElementById('finish-err').textContent = '';
 
   const payload = {
     browser_path: selectedBrowserPath,
@@ -628,12 +634,12 @@ async function finishSetup() {
       document.getElementById(`step-${currentStep}`).classList.remove('active');
       document.getElementById('step-done').classList.add('active');
     } else {
-      alert('Failed to save configuration. Check permissions on ~/.memoir/');
+      document.getElementById('finish-err').textContent = 'Failed to save configuration. Check permissions on ~/.memoir/';
       btn.disabled = false;
       btn.textContent = 'Finish setup';
     }
   } catch (e) {
-    alert('Error: ' + e.message);
+    document.getElementById('finish-err').textContent = 'Error: ' + e.message;
     btn.disabled = false;
     btn.textContent = 'Finish setup';
   }
