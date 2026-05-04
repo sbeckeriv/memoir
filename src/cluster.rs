@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
@@ -34,6 +35,10 @@ const SESSION_GAP_MINS: i64 = 30;
 const MIN_PAGES: usize = 3;
 const MIN_SCORE: f32 = 0.35;
 
+const TOPIC_SIMILARITY_THRESHOLD: f32 = 0.72;
+const TOPIC_MIN_PAGES: usize = 3;
+const TOPIC_MAX_CLUSTERS: usize = 20;
+
 const STOP_WORDS: &[&str] = &[
     "the", "a", "an", "of", "in", "to", "for", "with", "on", "at", "by", "from", "is", "was",
     "that", "this", "it", "as", "are", "be", "have", "has", "had", "do", "does", "did", "will",
@@ -59,6 +64,103 @@ pub fn find_clusters(pages: Vec<PageForClustering>, ignored_domains: &[String]) 
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     clusters
+}
+
+pub fn find_topic_clusters(
+    pages: Vec<PageForClustering>,
+    ignored_domains: &[String],
+) -> Vec<Cluster> {
+    let with_emb: Vec<PageForClustering> = pages
+        .into_iter()
+        .filter(|p| p.embedding.is_some())
+        .collect();
+    let n = with_emb.len();
+    if n < TOPIC_MIN_PAGES {
+        return vec![];
+    }
+
+    let mut parent: Vec<usize> = (0..n).collect();
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let ei = with_emb[i].embedding.as_ref().unwrap();
+            let ej = with_emb[j].embedding.as_ref().unwrap();
+            if cosine_similarity(ei, ej) >= TOPIC_SIMILARITY_THRESHOLD {
+                let ri = uf_find(&mut parent, i);
+                let rj = uf_find(&mut parent, j);
+                if ri != rj {
+                    parent[rj] = ri;
+                }
+            }
+        }
+    }
+
+    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
+    for i in 0..n {
+        let root = uf_find(&mut parent, i);
+        groups.entry(root).or_default().push(i);
+    }
+
+    let mut owned: Vec<Option<PageForClustering>> = with_emb.into_iter().map(Some).collect();
+
+    let mut clusters: Vec<Cluster> = groups
+        .into_values()
+        .filter(|g| g.len() >= TOPIC_MIN_PAGES)
+        .filter_map(|g| {
+            let pages: Vec<PageForClustering> =
+                g.into_iter().map(|i| owned[i].take().unwrap()).collect();
+            topic_group_to_cluster(pages)
+        })
+        .filter(|c| !ignored_domains.iter().any(|d| d == &c.dominant_domain))
+        .collect();
+
+    clusters.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    clusters.truncate(TOPIC_MAX_CLUSTERS);
+    clusters
+}
+
+fn uf_find(parent: &mut [usize], mut x: usize) -> usize {
+    while parent[x] != x {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    x
+}
+
+fn topic_group_to_cluster(mut pages: Vec<PageForClustering>) -> Option<Cluster> {
+    pages.sort_by_key(|p| Reverse(p.visited_at));
+    let most_recent = pages.first()?.visited_at;
+    let embeddings: Vec<&Vec<f32>> = pages.iter().filter_map(|p| p.embedding.as_ref()).collect();
+    let score = if embeddings.len() >= 2 {
+        embedding_coherence(&embeddings)
+    } else {
+        0.0
+    };
+    let label = extract_label(&pages);
+    let dominant_domain = dominant_domain(&pages);
+    let domains = extract_domains(&pages);
+    let ts = most_recent.format("%Y-%m-%dT%H:%M:%S").to_string();
+    let cluster_pages = pages
+        .into_iter()
+        .map(|p| ClusterPage {
+            url: p.url,
+            title: p.title,
+        })
+        .collect();
+    Some(Cluster {
+        label,
+        score,
+        started_at: ts.clone(),
+        ended_at: ts,
+        duration_mins: 0,
+        dominant_domain,
+        domains,
+        pages: cluster_pages,
+    })
 }
 
 fn split_sessions(mut pages: Vec<PageForClustering>) -> Vec<Vec<PageForClustering>> {

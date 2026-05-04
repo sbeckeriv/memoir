@@ -33,7 +33,7 @@ history_db_path = "~/Library/Application Support/Orion/Defaults/history"
 
 | Key | Default | Description |
 |---|---|---|
-| `kind` | `orion` | Browser to read history from. One of: `orion`, `chrome`, `brave`, `arc`, `edge`, `chromium`, `firefox` |
+| `kind` | `orion` | Browser to read history from. One of: `orion`, `chrome`, `brave`, `arc`, `edge`, `chromium`, `firefox`, `safari` |
 | `history_db_path` | *(Orion default)* | Full path to the browser's SQLite history file |
 
 ## `[data]`

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::browser::{self, HistoryItem};
 use crate::cluster::{self, Cluster};
-use crate::index::{PageEntry, SearchResult, Stats};
+use crate::index::{PageEntry, SearchResult, Stats, WeeklyEntry};
 use crate::rag::AskResponse;
 use crate::session_log::LogKind;
 
@@ -146,6 +146,70 @@ pub async fn recent(
             .collect();
 
         Ok(Json(filtered))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+#[derive(Serialize)]
+pub struct WeeklyPage {
+    pub url: String,
+    pub title: String,
+    pub snippet: String,
+    pub last_visit_at: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct WeeklyGroup {
+    pub host: String,
+    pub pages: Vec<WeeklyPage>,
+    pub is_new: bool,
+    pub prior_count: usize,
+}
+
+pub async fn weekly(State(state): State<AppState>) -> Result<Json<Vec<WeeklyGroup>>, StatusCode> {
+    let index = state.index.clone();
+    tokio::task::spawn_blocking(move || {
+        let (entries, prior_counts) = index
+            .weekly_pages(7)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let mut groups: std::collections::HashMap<String, Vec<WeeklyEntry>> =
+            std::collections::HashMap::new();
+        for entry in entries {
+            groups.entry(entry.host.clone()).or_default().push(entry);
+        }
+
+        let mut result: Vec<WeeklyGroup> = groups
+            .into_iter()
+            .map(|(host, pages)| {
+                let prior_count = prior_counts.get(&host).copied().unwrap_or(0);
+                let is_new = prior_count == 0;
+                WeeklyGroup {
+                    host,
+                    prior_count,
+                    is_new,
+                    pages: pages
+                        .into_iter()
+                        .map(|e| WeeklyPage {
+                            url: e.url,
+                            title: e.title,
+                            snippet: e.snippet,
+                            last_visit_at: e.last_visit_at,
+                        })
+                        .collect(),
+                }
+            })
+            .collect();
+
+        // New hosts first, then by page count descending.
+        result.sort_by(|a, b| {
+            b.is_new
+                .cmp(&a.is_new)
+                .then(b.pages.len().cmp(&a.pages.len()))
+        });
+
+        Ok(Json(result))
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -856,6 +920,46 @@ pub async fn open_url(Query(params): Query<UrlParam>) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
+// --- reindex ---
+
+pub async fn reindex_page(
+    State(state): State<AppState>,
+    Query(params): Query<UrlParam>,
+) -> StatusCode {
+    let url = params.url.clone();
+    tokio::spawn(async move {
+        let fetch_config = state.config.read().unwrap().fetch.clone();
+        let fetcher = match crate::fetch::Fetcher::new(&fetch_config) {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+        if let crate::fetch::FetchResult::Ok(page) = fetcher.fetch(&url).await {
+            let index = state.index.clone();
+            let url2 = url.clone();
+            let title = page.title.clone();
+            let body = page.body.clone();
+            if tokio::task::spawn_blocking(move || index.upsert_page(&url2, &title, &body))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            if let Some(embedder) = &state.embedder {
+                let text = format!("{} {}", page.title, page.body);
+                let embedder = embedder.clone();
+                if let Ok(Ok(vec)) =
+                    tokio::task::spawn_blocking(move || embedder.embed_one(&text)).await
+                {
+                    let index = state.index.clone();
+                    let _ = tokio::task::spawn_blocking(move || index.store_embedding(&url, &vec))
+                        .await;
+                }
+            }
+        }
+    });
+    StatusCode::ACCEPTED
+}
+
 // --- export / import starred ---
 
 pub async fn export_starred(State(state): State<AppState>) -> Response {
@@ -897,6 +1001,84 @@ pub async fn import_starred(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::json!({ "imported": imported })))
+}
+
+pub async fn export_all(State(state): State<AppState>) -> Response {
+    let index = state.index.clone();
+    match tokio::task::spawn_blocking(move || index.export_all()).await {
+        Ok(Ok(export)) => match serde_json::to_vec_pretty(&export) {
+            Ok(json) => (
+                [
+                    (header::CONTENT_TYPE, "application/json"),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"memoir-backup.json\"",
+                    ),
+                ],
+                json,
+            )
+                .into_response(),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+pub async fn import_all(
+    State(state): State<AppState>,
+    Json(export): Json<crate::index::FullExport>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let index = state.index.clone();
+    let (pages, bans) = tokio::task::spawn_blocking(move || index.import_all(&export))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(serde_json::json!({ "pages": pages, "bans": bans })))
+}
+
+pub async fn topic_clusters(
+    State(state): State<AppState>,
+    Query(params): Query<ClustersParams>,
+) -> Result<Json<Vec<Cluster>>, StatusCode> {
+    let index = state.index.clone();
+    tokio::task::spawn_blocking(move || {
+        let pages = index
+            .get_pages_for_clustering(params.days)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let ignored = index.get_cluster_ignored_domains().unwrap_or_default();
+        Ok(Json(cluster::find_topic_clusters(pages, &ignored)))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+}
+
+pub async fn export_markdown(State(state): State<AppState>) -> Response {
+    let index = state.index.clone();
+    match tokio::task::spawn_blocking(move || index.get_starred(10000)).await {
+        Ok(Ok(items)) => {
+            let mut md = String::from("# Starred Pages\n\n");
+            for item in &items {
+                let title = if item.title.is_empty() {
+                    item.url.as_str()
+                } else {
+                    item.title.as_str()
+                };
+                md.push_str(&format!("- [{}]({})\n", title, item.url));
+            }
+            (
+                [
+                    (header::CONTENT_TYPE, "text/markdown; charset=utf-8"),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"memoir-starred.md\"",
+                    ),
+                ],
+                md,
+            )
+                .into_response()
+        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 // --- settings ---

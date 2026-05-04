@@ -226,12 +226,34 @@ main {
 .icon-btn:hover { background: #f0f0f4; border-color: #d8d8e0; color: #555; }
 .icon-btn.starred { color: #f59e0b; }
 .icon-btn.del:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.result-item.is-selected { background: rgba(91,138,244,0.08); border-radius: 4px; }
 
 .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
 @media (max-width: 640px) { .home-grid { grid-template-columns: 1fr; } }
 
 .site-list { display: flex; flex-direction: column; }
-#recent-list { max-height: 220px; overflow-y: auto; }
+#weekly-list { max-height: 360px; overflow-y: auto; }
+.weekly-group { margin-bottom: 0.75rem; }
+.weekly-group:last-child { margin-bottom: 0; }
+.weekly-host {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 0.25rem;
+}
+.weekly-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+.weekly-badge.new { background: #dcfce7; color: #166534; }
+.weekly-badge.active { background: #dbeafe; color: #1e40af; }
+.weekly-pages { padding-left: 0.1rem; }
 
 .site-item {
   display: flex;
@@ -434,6 +456,12 @@ main {
   padding: 0;
 }
 .clusters-footer button:hover { text-decoration: underline; }
+.cluster-tab {
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: #aaa; background: none; border: none;
+  padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 4px;
+}
+.cluster-tab.active { color: #5b8af4; background: rgba(91,138,244,0.1); }
 </style>
 <link rel="stylesheet" href="/api/custom-css">
 </head>
@@ -473,13 +501,17 @@ main {
       <div class="site-list" id="starred-list"><span class="empty">Nothing starred yet — star pages in <a href="/manage">Manage</a>.</span></div>
     </div>
     <div class="card">
-      <div class="card-title">Recent</div>
-      <div class="site-list" id="recent-list"><span class="empty">Loading…</span></div>
+      <div class="card-title">This Week</div>
+      <div id="weekly-list"><span class="empty">Loading…</span></div>
     </div>
   </div>
 
   <div class="card" id="clusters-section" style="display:none">
-    <div class="card-title">Topics</div>
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.875rem">
+      <span class="card-title" style="margin-bottom:0;flex-shrink:0">Browsing</span>
+      <button class="cluster-tab active" id="tab-sessions" onclick="switchClusterTab('sessions')">Sessions</button>
+      <button class="cluster-tab" id="tab-topics" onclick="switchClusterTab('topics')">Topics</button>
+    </div>
     <div class="cluster-list" id="cluster-list"></div>
     <div class="clusters-footer" id="clusters-footer" style="display:none">
       <button onclick="showHiddenClusters()"></button>
@@ -492,6 +524,10 @@ const qInput = document.getElementById('q');
 const askInput = document.getElementById('ask-q');
 const qClear = document.getElementById('q-clear');
 const askClear = document.getElementById('ask-clear');
+
+let _resultSel = -1, _resultItems = [];
+let _clusterTab = 'sessions';
+let _topicClusters = [];
 
 function syncClear(input, btn) {
   btn.style.display = input.value ? 'block' : 'none';
@@ -519,6 +555,35 @@ document.getElementById('btn-ask').addEventListener('click', () => doAsk());
 qInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
 askInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAsk(); });
 qInput.focus();
+
+function updateResultItems() {
+  _resultItems = [...document.querySelectorAll('#results-body .result-item')];
+  _resultItems.forEach((el, i) => el.classList.toggle('is-selected', i === _resultSel));
+}
+
+function setResultSel(i) {
+  _resultSel = i;
+  updateResultItems();
+  _resultItems[i]?.scrollIntoView({ block: 'nearest' });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement !== qInput && document.activeElement !== askInput
+      && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+    e.preventDefault(); qInput.focus(); return;
+  }
+  const inInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+  if (!inInput && _resultItems.length > 0) {
+    if (e.key === 'j' || e.key === 'ArrowDown') {
+      e.preventDefault(); setResultSel((_resultSel + 1) % _resultItems.length);
+    } else if (e.key === 'k' || e.key === 'ArrowUp') {
+      e.preventDefault(); setResultSel((_resultSel - 1 + _resultItems.length) % _resultItems.length);
+    } else if ((e.key === 'Enter' || e.key === 'o') && _resultSel >= 0) {
+      e.preventDefault();
+      _resultItems[_resultSel]?.querySelector('a[href]')?.click();
+    }
+  }
+});
 
 let _liveTimer = null;
 qInput.addEventListener('input', () => {
@@ -561,6 +626,9 @@ function hideSpinner() {
 
 function setBody(html) {
   document.getElementById('results-body').innerHTML = html;
+  _resultSel = -1;
+  _resultItems = [];
+  updateResultItems();
 }
 
 function showAskSpinner() {
@@ -577,6 +645,8 @@ function setAskBody(html) {
 }
 
 function renderSearchItems(items) {
+  document.getElementById('results-label').textContent =
+    items.length ? `Search Results · ${items.length}` : 'Search Results';
   if (!items.length) { setBody('<span class="empty">No results found.</span>'); return; }
   setBody(items.map(i => {
     const dates = [];
@@ -721,10 +791,37 @@ function renderSiteItem(i) {
   </div>`;
 }
 
-function loadRecent() { loadList('/api/recent?limit=5', 'recent-list', renderSiteItem); }
 function loadStarred() { loadList('/api/starred?limit=20', 'starred-list', renderSiteItem); }
 
-loadRecent();
+async function loadWeekly() {
+  const el = document.getElementById('weekly-list');
+  try {
+    const r = await fetch('/api/weekly');
+    const groups = await r.json();
+    if (!groups.length) { el.innerHTML = '<span class="empty">Nothing indexed from the past week.</span>'; return; }
+    el.innerHTML = groups.map(g => {
+      const badge = g.is_new
+        ? '<span class="weekly-badge new">New</span>'
+        : g.pages.length > g.prior_count
+          ? '<span class="weekly-badge active">Active</span>'
+          : '';
+      const favicon = `<img class="favicon" src="/api/favicon?host=${esc(g.host)}" alt="" onerror="this.style.display='none'" loading="lazy">`;
+      const pages = g.pages.slice(0, 4).map(p =>
+        `<div class="site-item">
+          <a href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.snippet || p.url)}">${esc(p.title || p.url)}</a>
+        </div>`
+      ).join('');
+      return `<div class="weekly-group">
+        <div class="weekly-host">${favicon}${esc(g.host)}${badge}</div>
+        <div class="weekly-pages">${pages}</div>
+      </div>`;
+    }).join('');
+  } catch {
+    el.innerHTML = '<span class="empty">Could not load.</span>';
+  }
+}
+
+loadWeekly();
 loadStarred();
 
 let _pollFetched = null;
@@ -746,7 +843,7 @@ async function startPolling() {
     const fetched = await loadStats();
     if (fetched !== null && _pollFetched !== null && fetched !== _pollFetched) {
       _pollFetched = fetched;
-      loadRecent();
+      loadWeekly();
       loadStarred();
       loadClusters();
     } else if (fetched !== null) {
@@ -782,6 +879,39 @@ async function loadClusters() {
   } catch {}
 }
 loadClusters();
+loadTopicClusters();
+
+async function loadTopicClusters() {
+  try {
+    const r = await fetch('/api/topic-clusters?days=14');
+    _topicClusters = await r.json();
+    if (_clusterTab === 'topics') renderTopicClusters();
+  } catch {}
+}
+
+function switchClusterTab(tab) {
+  _clusterTab = tab;
+  document.getElementById('tab-sessions').classList.toggle('active', tab === 'sessions');
+  document.getElementById('tab-topics').classList.toggle('active', tab === 'topics');
+  document.getElementById('clusters-footer').style.display = 'none';
+  if (tab === 'sessions') {
+    renderClusters();
+  } else {
+    renderTopicClusters();
+    if (!_topicClusters.length) loadTopicClusters();
+  }
+}
+
+function renderTopicClusters() {
+  const section = document.getElementById('clusters-section');
+  const list = document.getElementById('cluster-list');
+  if (!_topicClusters.length) {
+    list.innerHTML = '<span class="empty">No topic clusters yet — needs embeddings enabled.</span>';
+    section.style.display = 'block'; return;
+  }
+  section.style.display = 'block';
+  list.innerHTML = _topicClusters.map(renderCluster).join('');
+}
 
 function renderClusters() {
   const dismissed = getDismissed();

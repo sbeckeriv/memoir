@@ -13,6 +13,7 @@ pub enum BrowserKind {
     Arc,
     Edge,
     Firefox,
+    Safari,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use thiserror::Error;
 use tracing::{debug, info, warn};
@@ -80,6 +80,15 @@ pub struct PageEntry {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct WeeklyEntry {
+    pub url: String,
+    pub title: String,
+    pub snippet: String,
+    pub host: String,
+    pub last_visit_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct VectorResult {
     pub url: String,
     pub title: String,
@@ -95,6 +104,24 @@ pub struct Stats {
     pub auth_wall: u64,
     pub skipped: u64,
     pub favicons: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportPage {
+    pub url: String,
+    pub title: String,
+    pub body: String,
+    pub starred: bool,
+    pub first_visit_at: Option<String>,
+    pub last_visit_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FullExport {
+    pub version: u32,
+    pub exported_at: String,
+    pub pages: Vec<ExportPage>,
+    pub ban_list: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -470,6 +497,111 @@ impl IndexStore {
         Ok(())
     }
 
+    pub fn export_all(&self) -> Result<FullExport> {
+        let conn = Connection::open(&self.path)?;
+        let pages = conn
+            .prepare(
+                "SELECT url, title, body, starred, first_visit_at, last_visit_at
+                 FROM pages WHERE fetch_status = 'fetched'
+                 ORDER BY last_visit_at DESC NULLS LAST",
+            )?
+            .query_map([], |r| {
+                Ok(ExportPage {
+                    url: r.get(0)?,
+                    title: r.get(1)?,
+                    body: r.get(2)?,
+                    starred: r.get::<_, i32>(3)? != 0,
+                    first_visit_at: r.get(4)?,
+                    last_visit_at: r.get(5)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        let ban_list = conn
+            .prepare("SELECT host FROM banned_hosts ORDER BY host")?
+            .query_map([], |r| r.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(FullExport {
+            version: 1,
+            exported_at: chrono::Utc::now().to_rfc3339(),
+            pages,
+            ban_list,
+        })
+    }
+
+    pub fn import_all(&self, export: &FullExport) -> Result<(u64, u64)> {
+        let mut conn = Connection::open(&self.path)?;
+        let tx = conn.transaction()?;
+        let mut pages_imported = 0u64;
+        for page in &export.pages {
+            if !page.url.starts_with("http://") && !page.url.starts_with("https://") {
+                continue;
+            }
+            let existing: Option<i64> = tx
+                .query_row("SELECT id FROM pages WHERE url = ?1", [&page.url], |r| {
+                    r.get(0)
+                })
+                .optional()?;
+            if let Some(id) = existing {
+                tx.execute("DELETE FROM pages_fts WHERE rowid = ?1", [id])?;
+                tx.execute(
+                    "UPDATE pages SET title=?1, body=?2, fetch_status='fetched',
+                     starred=MAX(starred,?3),
+                     first_visit_at=COALESCE(first_visit_at,?4),
+                     last_visit_at=CASE WHEN ?5 > COALESCE(last_visit_at,'') THEN ?5 ELSE last_visit_at END
+                     WHERE id=?6",
+                    params![
+                        page.title,
+                        page.body,
+                        page.starred as i32,
+                        page.first_visit_at,
+                        page.last_visit_at,
+                        id
+                    ],
+                )?;
+                tx.execute(
+                    "INSERT INTO pages_fts(rowid, title, body) VALUES(?1, ?2, ?3)",
+                    params![id, page.title, page.body],
+                )?;
+            } else {
+                tx.execute(
+                    "INSERT INTO pages(url,title,body,fetch_status,starred,first_visit_at,last_visit_at) \
+                     VALUES(?1,?2,?3,'fetched',?4,?5,?6)",
+                    params![
+                        page.url,
+                        page.title,
+                        page.body,
+                        page.starred as i32,
+                        page.first_visit_at,
+                        page.last_visit_at
+                    ],
+                )?;
+                let id = tx.last_insert_rowid();
+                if !page.body.is_empty() {
+                    tx.execute(
+                        "INSERT INTO pages_fts(rowid, title, body) VALUES(?1, ?2, ?3)",
+                        params![id, page.title, page.body],
+                    )?;
+                }
+            }
+            pages_imported += 1;
+        }
+        tx.commit()?;
+        let conn2 = Connection::open(&self.path)?;
+        let mut bans_imported = 0u64;
+        for pattern in &export.ban_list {
+            if !pattern.is_empty() {
+                conn2.execute(
+                    "INSERT OR IGNORE INTO banned_hosts(host) VALUES(?1)",
+                    [pattern.as_str()],
+                )?;
+                bans_imported += 1;
+            }
+        }
+        Ok((pages_imported, bans_imported))
+    }
+
     pub fn import_starred(&self, items: &[(String, String)]) -> Result<u64> {
         let mut count = 0u64;
         for (url, title) in items {
@@ -741,6 +873,62 @@ impl IndexStore {
 
     /// Cosine-similarity search over all stored embeddings. Only returns results
     /// with score ≥ `min_score` so zero-vectors don't pollute RAG context.
+    /// Returns pages visited in the last `days_back` days that are fetched,
+    /// plus a map of host → page count for the prior `days_back` days (novelty).
+    pub fn weekly_pages(
+        &self,
+        days_back: i64,
+    ) -> Result<(Vec<WeeklyEntry>, std::collections::HashMap<String, usize>)> {
+        let conn = Connection::open(&self.path)?;
+        let cutoff = format!("-{days_back} days");
+        let prior_cutoff = format!("-{} days", days_back * 2);
+
+        let entries: Vec<WeeklyEntry> = conn
+            .prepare(
+                "SELECT url, title,
+                        substr(body, 1, 300) as snippet,
+                        last_visit_at
+                 FROM pages
+                 WHERE fetch_status = 'fetched'
+                   AND last_visit_at >= datetime('now', ?1)
+                 ORDER BY last_visit_at DESC",
+            )?
+            .query_map([&cutoff], |r| {
+                let url: String = r.get(0)?;
+                let host = crate::config::host_from_url(&url).to_string();
+                Ok(WeeklyEntry {
+                    url,
+                    title: r.get(1)?,
+                    snippet: r.get(2)?,
+                    host,
+                    last_visit_at: r.get(3)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let prior_counts: std::collections::HashMap<String, usize> = {
+            let rows: Vec<String> = conn
+                .prepare(
+                    "SELECT url FROM pages
+                     WHERE fetch_status = 'fetched'
+                       AND last_visit_at >= datetime('now', ?1)
+                       AND last_visit_at < datetime('now', ?2)",
+                )?
+                .query_map([&prior_cutoff, &cutoff], |r| r.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            let mut map = std::collections::HashMap::new();
+            for url in rows {
+                let host = crate::config::host_from_url(&url).to_string();
+                *map.entry(host).or_insert(0) += 1;
+            }
+            map
+        };
+
+        Ok((entries, prior_counts))
+    }
+
     pub fn vector_search(
         &self,
         query: &[f32],

@@ -1,2 +1,5 @@
 pub mod store;
-pub use store::{FetchStatus, IndexStore, PageEntry, SearchResult, Stats, VectorResult};
+pub use store::{
+    ExportPage, FetchStatus, FullExport, IndexStore, PageEntry, SearchResult, Stats, VectorResult,
+    WeeklyEntry,
+};

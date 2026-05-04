@@ -91,7 +91,7 @@ main {
 }
 .btn:hover { opacity: 0.85; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-prev, .btn-next, .btn-export-stars, .btn-import-stars { background: #e8e8ee; color: #333; }
+.btn-prev, .btn-next, .btn-export-stars, .btn-import-stars, .btn-export-md { background: #e8e8ee; color: #333; }
 
 .status-tabs {
   display: flex;
@@ -149,7 +149,7 @@ td {
 .col-title { max-width: 280px; }
 .col-url { max-width: 320px; }
 .col-status { width: 90px; }
-.col-actions { width: 130px; white-space: nowrap; }
+.col-actions { white-space: nowrap; }
 
 .title-cell {
   display: flex;
@@ -225,6 +225,8 @@ td {
 .icon-btn.starred { color: #f59e0b; }
 .icon-btn.del:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .icon-btn.ban-host:hover { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.icon-btn.del-host:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.icon-btn.reindex:hover { background: #e0e7ff; border-color: #a5b4fc; color: #3730a3; }
 
 .empty { color: #aaa; font-size: 0.88rem; font-style: italic; padding: 1.5rem 0.875rem; }
 
@@ -316,6 +318,7 @@ td {
     <button class="btn btn-export-stars" id="btn-export-stars">Export Stars</button>
     <input type="file" id="import-file" accept=".json" style="display:none">
     <button class="btn btn-import-stars" id="btn-import-stars">Import Stars</button>
+    <button class="btn btn-export-md" id="btn-export-md">Export Markdown</button>
     <button class="btn btn-prev" id="btn-prev" disabled>&#8592; Prev</button>
     <button class="btn btn-next" id="btn-next" disabled>Next &#8594;</button>
   </div>
@@ -412,7 +415,9 @@ async function load() {
         <td class="col-actions">
           <div class="actions">
             <button class="icon-btn ${starClass}" title="${item.starred ? 'Unstar' : 'Star'}" onclick="toggleStar(this)">${star}</button>
-            <button class="icon-btn del" title="Delete this URL" onclick="deletePage(this)">🗑</button>
+            <button class="icon-btn reindex" title="Re-index this page" onclick="reindexPage(this)">↺</button>
+            <button class="icon-btn del" title="Delete this page" onclick="deletePage(this)">🗑</button>
+            <button class="icon-btn del-host" title="Delete all ${esc(h)} pages (no ban)" onclick="deleteHost(this)">✕ ${esc(h)}</button>
             <button class="icon-btn ban-host" title="Ban host &amp; delete all its pages" onclick="banHost(this)">🚫 ${esc(h)}</button>
           </div>
         </td>
@@ -446,6 +451,26 @@ async function deletePage(btn) {
   } else {
     showToast('Delete failed');
   }
+}
+
+async function deleteHost(btn) {
+  const row = btn.closest('tr');
+  const host = row.dataset.host;
+  if (!confirm(`Delete all pages from "${host}" from the index?\n(The domain will not be banned.)`)) return;
+  const r = await fetch(`/api/host?host=${encodeURIComponent(host)}`, { method: 'DELETE' });
+  if (r.ok) {
+    document.querySelectorAll(`tr[data-host="${CSS.escape(host)}"]`).forEach(r => r.remove());
+    showToast(`All ${host} pages deleted`);
+  } else {
+    showToast('Delete failed');
+  }
+}
+
+async function reindexPage(btn) {
+  const row = btn.closest('tr');
+  const url = row.dataset.url;
+  await fetch(`/api/reindex?url=${encodeURIComponent(url)}`, { method: 'POST' });
+  showToast('Re-indexing started');
 }
 
 async function banHost(btn) {
@@ -517,6 +542,10 @@ document.getElementById('btn-sync-now').addEventListener('click', async () => {
 
 document.getElementById('btn-export-stars').addEventListener('click', () => {
   window.location.href = '/api/export/starred';
+});
+
+document.getElementById('btn-export-md').addEventListener('click', () => {
+  window.location.href = '/api/export/markdown';
 });
 
 document.getElementById('btn-import-stars').addEventListener('click', () => {

@@ -1,6 +1,7 @@
 pub mod chromium;
 pub mod firefox;
 pub mod orion;
+pub mod safari;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -78,5 +79,6 @@ pub fn for_config(settings: &BrowserSettings) -> Arc<dyn BrowserHistory> {
         | BrowserKind::Edge => Arc::new(chromium::ChromiumBrowser),
         BrowserKind::Orion => Arc::new(orion::OrionBrowser),
         BrowserKind::Firefox => Arc::new(firefox::FirefoxBrowser),
+        BrowserKind::Safari => Arc::new(safari::SafariBrowser),
     }
 }

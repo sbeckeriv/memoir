@@ -124,6 +124,14 @@ html, body {
   margin-right: 3px;
   color: rgba(255,255,255,0.35);
 }
+.recent-icon {
+  font-size: 12px;
+  color: rgba(255,255,255,0.28);
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+.recent-row .result-title { color: rgba(255,255,255,0.55); font-weight: 400; }
 </style>
 <link rel="stylesheet" href="/api/custom-css">
 </head>
@@ -153,13 +161,42 @@ const divider = document.getElementById('results-divider');
 const askAnswerEl = document.getElementById('ask-answer');
 let items = [], sel = -1, timer;
 
+const RECENT_KEY = 'memoir_recent_searches';
+
+function getRecents() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; }
+}
+
+function saveSearch(q) {
+  const recents = [q, ...getRecents().filter(r => r !== q)].slice(0, 5);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(recents));
+}
+
+function renderRecents() {
+  const recents = getRecents();
+  if (!recents.length) { divider.style.display = 'none'; resultListEl.innerHTML = ''; return; }
+  divider.style.display = 'block';
+  resultListEl.innerHTML = recents.map((r, i) =>
+    `<div class="result-row recent-row" onclick="pickRecent(${i})">
+      <span class="recent-icon">↺</span>
+      <div class="result-text"><div class="result-title">${esc(r)}</div></div>
+    </div>`
+  ).join('');
+}
+
+function pickRecent(i) {
+  const q = getRecents()[i];
+  if (!q) return;
+  queryEl.value = q;
+  searchAndMaybeAsk(q, false);
+}
+
 function clearPalette() {
   queryEl.value = '';
   items = []; sel = -1;
-  resultListEl.innerHTML = '';
-  divider.style.display = 'none';
   askAnswerEl.style.display = 'none';
   askAnswerEl.innerHTML = '';
+  renderRecents();
   queryEl.focus();
 }
 window.clearPalette = clearPalette;
@@ -169,10 +206,9 @@ queryEl.addEventListener('input', () => {
   const raw = queryEl.value.trim();
   if (!raw) {
     items = []; sel = -1;
-    resultListEl.innerHTML = '';
-    divider.style.display = 'none';
     askAnswerEl.style.display = 'none';
     askAnswerEl.innerHTML = '';
+    renderRecents();
     return;
   }
   const isQuestion = raw.endsWith('?');
@@ -184,12 +220,14 @@ queryEl.addEventListener('input', () => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { doHide(); return; }
   if (!items.length) return;
-  if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+  const inInput = document.activeElement === queryEl;
+  if (e.key === 'ArrowDown' || (!inInput && e.key === 'j')) { e.preventDefault(); move(1); }
+  else if (e.key === 'ArrowUp' || (!inInput && e.key === 'k')) { e.preventDefault(); move(-1); }
   else if (e.key === 'Enter') { e.preventDefault(); pick(sel); }
 });
 
 async function searchAndMaybeAsk(q, ask) {
+  saveSearch(q);
   askAnswerEl.style.display = 'none';
   askAnswerEl.innerHTML = '';
   try {
@@ -267,6 +305,7 @@ function esc(s) {
 }
 
 queryEl.focus();
+renderRecents();
 </script>
 </body>
 </html>

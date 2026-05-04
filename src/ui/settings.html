@@ -181,6 +181,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
         <option value="edge">Edge</option>
         <option value="chromium">Chromium</option>
         <option value="firefox">Firefox</option>
+        <option value="safari">Safari</option>
       </select>
       <span id="browser-default-path" class="hint" style="display:block;margin-top:4px"></span>
     </div>
@@ -281,6 +282,20 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
     <div class="field">
       <label for="custom-css">Custom CSS <span class="hint">applied to all pages — overrides built-in styles</span></label>
       <textarea id="custom-css" rows="8" placeholder="/* e.g. body { font-size: 15px; } */"></textarea>
+    </div>
+  </div>
+
+  <h2>Export &amp; Import</h2>
+  <div class="card">
+    <div class="field">
+      <label>Export all indexed pages</label>
+      <a class="btn btn-secondary" href="/api/export/all" download>Export backup</a>
+    </div>
+    <div class="field">
+      <label for="import-file">Import backup</label>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importAll(event)">
+      <button class="btn btn-secondary" onclick="document.getElementById('import-file').click()">Choose file…</button>
+      <span id="import-status" style="font-size:0.85rem;margin-left:0.5rem"></span>
     </div>
   </div>
 
@@ -400,6 +415,7 @@ const DEFAULT_PATHS = {
     edge:     '~/Library/Application Support/Microsoft Edge/Default/History',
     chromium: '~/Library/Application Support/Chromium/Default/History',
     firefox:  '~/Library/Application Support/Firefox/Profiles/<profile>.default-release/places.sqlite',
+    safari:   '~/Library/Safari/History.db',
   },
   linux: {
     orion:    '',
@@ -409,6 +425,7 @@ const DEFAULT_PATHS = {
     edge:     '~/.config/microsoft-edge/Default/History',
     chromium: '~/.config/chromium/Default/History',
     firefox:  '~/.mozilla/firefox/<profile>.default-release/places.sqlite',
+    safari:   '',
   },
   windows: {
     orion:    '',
@@ -418,6 +435,7 @@ const DEFAULT_PATHS = {
     edge:     '%APPDATA%\\Microsoft\\Edge\\User Data\\Default\\History',
     chromium: '%APPDATA%\\Chromium\\User Data\\Default\\History',
     firefox:  '%APPDATA%\\Mozilla\\Firefox\\Profiles\\<profile>.default-release\\places.sqlite',
+    safari:   '',
   },
 };
 
@@ -439,6 +457,31 @@ function showToast(msg, error = false) {
   t.className = 'toast' + (error ? ' error' : '');
   t.style.display = 'inline';
   setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+async function importAll(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('import-status');
+  status.textContent = 'Importing…';
+  status.style.color = '#888';
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const r = await fetch('/api/import/all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!r.ok) throw new Error();
+    const result = await r.json();
+    status.textContent = `Imported ${result.pages} pages, ${result.bans} ban entries.`;
+    status.style.color = '#4caf50';
+  } catch {
+    status.textContent = 'Import failed.';
+    status.style.color = '#e53935';
+  }
+  e.target.value = '';
 }
 
 load();
