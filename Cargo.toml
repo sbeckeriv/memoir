@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "memoir"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 
 [lib]

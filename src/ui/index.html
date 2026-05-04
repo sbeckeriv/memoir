@@ -243,7 +243,19 @@ main {
   font-weight: 600;
   color: #555;
   margin-bottom: 0.25rem;
+  cursor: pointer;
+  user-select: none;
 }
+.weekly-host:hover { color: #333; }
+.weekly-toggle {
+  margin-left: auto;
+  font-size: 0.65rem;
+  color: #999;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.weekly-group.collapsed .weekly-toggle { transform: rotate(-90deg); }
+.weekly-group.collapsed .weekly-pages { display: none; }
 .weekly-badge {
   font-size: 0.68rem;
   font-weight: 600;
@@ -812,7 +824,7 @@ async function loadWeekly() {
         </div>`
       ).join('');
       return `<div class="weekly-group">
-        <div class="weekly-host">${favicon}${esc(g.host)}${badge}</div>
+        <div class="weekly-host" onclick="this.closest('.weekly-group').classList.toggle('collapsed')">${favicon}${esc(g.host)}${badge}<span class="weekly-toggle">&#9660;</span></div>
         <div class="weekly-pages">${pages}</div>
       </div>`;
     }).join('');

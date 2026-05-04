@@ -298,6 +298,7 @@ fn build_tray(
 
     let pause_item = pause_idx.clone();
     let autolaunch_item = autolaunch.clone();
+    let check_updates_item = check_updates.clone();
 
     TrayIconBuilder::new()
         .tooltip("Memoir")
@@ -350,22 +351,44 @@ fn build_tray(
             "check_updates" => {
                 use tauri_plugin_updater::UpdaterExt;
                 let app = app.clone();
+                let item = check_updates_item.clone();
                 tauri::async_runtime::spawn(async move {
+                    let _ = item.set_text("Checking…");
                     match app.updater() {
                         Ok(updater) => match updater.check().await {
                             Ok(Some(update)) => {
                                 tracing::info!(version = %update.version, "update available, installing");
-                                if let Err(e) = update
-                                    .download_and_install(|_, _| {}, || {})
-                                    .await
-                                {
-                                    tracing::warn!(error = %e, "update install failed");
+                                let _ = item.set_text("Updating…");
+                                match update.download_and_install(|_, _| {}, || {}).await {
+                                    Ok(()) => {
+                                        tracing::info!("update installed, restarting");
+                                        app.restart();
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(error = %e, "update install failed");
+                                        let _ = item.set_text("Update failed");
+                                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                                        let _ = item.set_text("Check for Updates…");
+                                    }
                                 }
                             }
-                            Ok(None) => tracing::info!("memoir is up to date"),
-                            Err(e) => tracing::warn!(error = %e, "update check failed"),
+                            Ok(None) => {
+                                tracing::info!("memoir is up to date");
+                                let _ = item.set_text("✓ Up to date");
+                                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                                let _ = item.set_text("Check for Updates…");
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "update check failed");
+                                let _ = item.set_text("Check failed");
+                                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                                let _ = item.set_text("Check for Updates…");
+                            }
                         },
-                        Err(e) => tracing::warn!(error = %e, "updater unavailable"),
+                        Err(e) => {
+                            tracing::warn!(error = %e, "updater unavailable");
+                            let _ = item.set_text("Check for Updates…");
+                        }
                     }
                 });
             }

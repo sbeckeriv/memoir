@@ -53,7 +53,7 @@ async fn index_page_contains_search_ui() {
         "page should reference the ask API"
     );
     assert!(
-        body.contains("/api/recent"),
-        "page should reference the recent API"
+        body.contains("/api/weekly"),
+        "page should reference the weekly API"
     );
 }
