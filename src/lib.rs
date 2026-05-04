@@ -18,4 +18,4 @@ pub use embed::{EmbedText, Embedder};
 pub use index::{FetchStatus, IndexStore, PageEntry, SearchResult, Stats, VectorResult};
 pub use rag::{AskResponse, LlmClient};
 pub use server::Application;
-pub use session_log::SessionLog;
+pub use session_log::{LogKind, SessionLog};

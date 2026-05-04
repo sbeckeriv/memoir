@@ -27,6 +27,8 @@ pub struct AppState {
     pub config: Arc<RwLock<Settings>>,
     pub sync_paused: Arc<AtomicBool>,
     pub palette_hide: Arc<tokio::sync::Notify>,
+    pub update_requested: Arc<tokio::sync::Notify>,
+    pub update_status: Arc<tokio::sync::Mutex<String>>,
     pub log: Arc<crate::session_log::SessionLog>,
 }
 
@@ -36,6 +38,8 @@ pub struct Application {
     router: Router,
     sync_paused: Arc<AtomicBool>,
     palette_hide: Arc<tokio::sync::Notify>,
+    update_requested: Arc<tokio::sync::Notify>,
+    update_status: Arc<tokio::sync::Mutex<String>>,
     pub log: Arc<crate::session_log::SessionLog>,
     pub state: AppState,
 }
@@ -52,6 +56,8 @@ impl Application {
         llm.ensure_loaded().await;
         let browser = crate::browser::for_config(&config.browser);
         let palette_hide = Arc::new(tokio::sync::Notify::new());
+        let update_requested = Arc::new(tokio::sync::Notify::new());
+        let update_status = Arc::new(tokio::sync::Mutex::new(String::new()));
         let log = Arc::new(crate::session_log::SessionLog::new());
         let state = AppState {
             browser_db_path: config.browser.history_db_path.clone(),
@@ -62,6 +68,8 @@ impl Application {
             config: Arc::new(RwLock::new(config.clone())),
             sync_paused: sync_paused.clone(),
             palette_hide: palette_hide.clone(),
+            update_requested: update_requested.clone(),
+            update_status: update_status.clone(),
             log: log.clone(),
         };
         let router = build_router(state.clone());
@@ -74,6 +82,8 @@ impl Application {
             router,
             sync_paused,
             palette_hide,
+            update_requested,
+            update_status,
             log,
             state,
         })
@@ -89,6 +99,14 @@ impl Application {
 
     pub fn palette_hide(&self) -> Arc<tokio::sync::Notify> {
         self.palette_hide.clone()
+    }
+
+    pub fn update_requested(&self) -> Arc<tokio::sync::Notify> {
+        self.update_requested.clone()
+    }
+
+    pub fn update_status(&self) -> Arc<tokio::sync::Mutex<String>> {
+        self.update_status.clone()
     }
 
     pub async fn run_until_stopped(self) -> std::io::Result<()> {
@@ -150,6 +168,9 @@ fn build_router(state: AppState) -> Router {
         .route("/api/custom-css", get(handlers::custom_css))
         .route("/log", get(handlers::log_page))
         .route("/api/log", get(handlers::log_entries))
+        .route("/api/version", get(handlers::version))
+        .route("/api/update/check", post(handlers::update_check))
+        .route("/api/update/status", get(handlers::update_status))
         .route("/mcp", post(handlers::mcp_http))
         .layer(cors)
         .with_state(state)

@@ -106,11 +106,88 @@ pub fn run() {
 
                         // Drive palette hide signals from Axum to the Tauri window.
                         let palette_notify = server.palette_hide();
+                        let ah_for_palette = ah_for_server.clone();
                         tauri::async_runtime::spawn(async move {
                             loop {
                                 palette_notify.notified().await;
-                                if let Some(w) = ah_for_server.get_webview_window("palette") {
+                                if let Some(w) = ah_for_palette.get_webview_window("palette") {
                                     w.hide().ok();
+                                }
+                            }
+                        });
+
+                        // Handle update-check requests from the web UI.
+                        let update_requested = server.update_requested();
+                        let update_status = server.update_status();
+                        let update_log = server.log.clone();
+                        tauri::async_runtime::spawn(async move {
+                            use tauri_plugin_updater::UpdaterExt;
+                            loop {
+                                update_requested.notified().await;
+                                update_log.push(
+                                    memoir::LogKind::Sync,
+                                    "Update check started",
+                                    None,
+                                );
+                                match ah_for_server.updater() {
+                                    Ok(updater) => match updater.check().await {
+                                        Ok(Some(update)) => {
+                                            let ver = update.version.clone();
+                                            update_log.push(
+                                                memoir::LogKind::Sync,
+                                                format!("Update available: v{ver}"),
+                                                None,
+                                            );
+                                            *update_status.lock().await =
+                                                format!("installing:{ver}");
+                                            match update
+                                                .download_and_install(|_, _| {}, || {})
+                                                .await
+                                            {
+                                                Ok(()) => {
+                                                    update_log.push(
+                                                        memoir::LogKind::Sync,
+                                                        "Update installed, restarting",
+                                                        None,
+                                                    );
+                                                    ah_for_server.restart();
+                                                }
+                                                Err(e) => {
+                                                    update_log.push(
+                                                        memoir::LogKind::Error,
+                                                        "Update install failed",
+                                                        e.to_string(),
+                                                    );
+                                                    *update_status.lock().await =
+                                                        format!("error:{e}");
+                                                }
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            update_log.push(
+                                                memoir::LogKind::Sync,
+                                                "Already up to date",
+                                                None,
+                                            );
+                                            *update_status.lock().await = "up_to_date".to_string();
+                                        }
+                                        Err(e) => {
+                                            update_log.push(
+                                                memoir::LogKind::Error,
+                                                "Update check failed",
+                                                e.to_string(),
+                                            );
+                                            *update_status.lock().await = format!("error:{e}");
+                                        }
+                                    },
+                                    Err(e) => {
+                                        update_log.push(
+                                            memoir::LogKind::Error,
+                                            "Updater unavailable",
+                                            e.to_string(),
+                                        );
+                                        *update_status.lock().await = format!("error:{e}");
+                                    }
                                 }
                             }
                         });
@@ -352,20 +429,29 @@ fn build_tray(
                 use tauri_plugin_updater::UpdaterExt;
                 let app = app.clone();
                 let item = check_updates_item.clone();
+                let log_upd = log.clone();
                 tauri::async_runtime::spawn(async move {
                     let _ = item.set_text("Checking…");
+                    log_upd.push(memoir::LogKind::Sync, "Update check started", None);
                     match app.updater() {
                         Ok(updater) => match updater.check().await {
                             Ok(Some(update)) => {
                                 tracing::info!(version = %update.version, "update available, installing");
                                 let _ = item.set_text("Updating…");
+                                log_upd.push(
+                                    memoir::LogKind::Sync,
+                                    format!("Update available: v{}", update.version),
+                                    None,
+                                );
                                 match update.download_and_install(|_, _| {}, || {}).await {
                                     Ok(()) => {
                                         tracing::info!("update installed, restarting");
+                                        log_upd.push(memoir::LogKind::Sync, "Update installed, restarting", None);
                                         app.restart();
                                     }
                                     Err(e) => {
                                         tracing::warn!(error = %e, "update install failed");
+                                        log_upd.push(memoir::LogKind::Error, "Update install failed", e.to_string());
                                         let _ = item.set_text("Update failed");
                                         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
                                         let _ = item.set_text("Check for Updates…");
@@ -374,12 +460,14 @@ fn build_tray(
                             }
                             Ok(None) => {
                                 tracing::info!("memoir is up to date");
+                                log_upd.push(memoir::LogKind::Sync, "Already up to date", None);
                                 let _ = item.set_text("✓ Up to date");
                                 tokio::time::sleep(std::time::Duration::from_secs(4)).await;
                                 let _ = item.set_text("Check for Updates…");
                             }
                             Err(e) => {
                                 tracing::warn!(error = %e, "update check failed");
+                                log_upd.push(memoir::LogKind::Error, "Update check failed", e.to_string());
                                 let _ = item.set_text("Check failed");
                                 tokio::time::sleep(std::time::Duration::from_secs(4)).await;
                                 let _ = item.set_text("Check for Updates…");
@@ -387,6 +475,7 @@ fn build_tray(
                         },
                         Err(e) => {
                             tracing::warn!(error = %e, "updater unavailable");
+                            log_upd.push(memoir::LogKind::Error, "Updater unavailable", e.to_string());
                             let _ = item.set_text("Check for Updates…");
                         }
                     }

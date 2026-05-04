@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Memoir",
-  "version": "1.0.1",
   "identifier": "app.memoir",
   "build": {
     "beforeDevCommand": "",

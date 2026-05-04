@@ -39,7 +39,11 @@ The memoir logo image in the header (`<img class="app-icon">`).
 
 ### `.header-nav`
 
-The secondary navigation links in the header (e.g. "← back to search · Settings · Activity").
+The secondary navigation links in the header ("Manage · Settings · Activity"). Consistent across all pages.
+
+### `.header-nav-current`
+
+The non-link label for the current page within `.header-nav`.
 
 ### `.card`
 
@@ -139,11 +143,21 @@ One search result row. Contains:
 
 ### `.home-grid`
 
-Two-column grid containing the Starred and Recent cards on the home page. Collapses to one column below 640 px.
+Two-column grid containing the Starred and This Week cards on the home page. Collapses to one column below 640 px.
 
 ### `.site-list` / `.site-item`
 
-List and row used in the Starred and Recent cards. Each `.site-item` contains a `.favicon` and a link.
+List and row used in the Starred card. Each `.site-item` contains a `.favicon` and a link.
+
+### This Week card
+
+| Class | Element |
+|---|---|
+| `.weekly-group` | One host group. Add `.collapsed` to collapse its pages |
+| `.weekly-host` | Clickable host header row (favicon + hostname + badge + chevron) |
+| `.weekly-toggle` | `▾` chevron that rotates when collapsed |
+| `.weekly-pages` | List of page links beneath the host header |
+| `.weekly-badge` | Pill label — `.weekly-badge.new` (green) or `.weekly-badge.active` (blue) |
 
 ### `.stats-bar`
 

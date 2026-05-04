@@ -352,6 +352,12 @@ The web interface is backed by a local Axum server. You can call it directly fro
 
 ---
 
+## Browser button
+
+Star the current page you are on and start its import from the click of a button in a browser.
+
+`window.fetch('http://127.0.0.1:3000/api/bookmark?url=' + encodeURIComponent(location.href) + '&title=' + encodeURIComponent(document.title), { method: 'POST' })`
+
 ## Data
 
 memoir stores everything in `~/.memoir/`:

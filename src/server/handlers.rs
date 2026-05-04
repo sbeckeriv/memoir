@@ -1144,3 +1144,27 @@ pub async fn mcp_http(
         None => StatusCode::ACCEPTED.into_response(),
     }
 }
+
+// --- version ---
+
+pub async fn version() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION") }))
+}
+
+// --- software updates ---
+
+pub async fn update_check(State(state): State<AppState>) -> StatusCode {
+    *state.update_status.lock().await = "checking".to_string();
+    state.update_requested.notify_one();
+    StatusCode::ACCEPTED
+}
+
+#[derive(Serialize)]
+pub struct UpdateStatusResponse {
+    pub status: String,
+}
+
+pub async fn update_status(State(state): State<AppState>) -> Json<UpdateStatusResponse> {
+    let status = state.update_status.lock().await.clone();
+    Json(UpdateStatusResponse { status })
+}
