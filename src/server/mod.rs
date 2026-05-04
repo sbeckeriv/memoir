@@ -9,6 +9,7 @@ use axum::{
     Router,
     routing::{delete, get, post},
 };
+use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::browser::BrowserHistory;
@@ -16,6 +17,51 @@ use crate::config::Settings;
 use crate::embed::EmbedText;
 use crate::index::IndexStore;
 use crate::rag::LlmClient;
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UpdateInfo {
+    pub version: String,
+    pub url: String,
+}
+
+fn is_newer_version(latest: &str, current: &str) -> bool {
+    let parse = |v: &str| -> Option<(u32, u32, u32)> {
+        let v = v.trim_start_matches('v');
+        let mut p = v.splitn(3, '.');
+        Some((
+            p.next()?.parse().ok()?,
+            p.next()?.parse().ok()?,
+            p.next()?.parse().ok()?,
+        ))
+    };
+    matches!((parse(latest), parse(current)), (Some(l), Some(c)) if l > c)
+}
+
+pub async fn check_latest_release(current_ver: &str) -> Option<UpdateInfo> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .get("https://api.github.com/repos/sbeckeriv/memoir/releases/latest")
+        .header("User-Agent", format!("memoir/{current_ver}"))
+        .header("Accept", "application/vnd.github.v3+json")
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let json: serde_json::Value = resp.json().await.ok()?;
+    let tag_name = json.get("tag_name")?.as_str()?;
+    let html_url = json.get("html_url")?.as_str()?;
+    if is_newer_version(tag_name, current_ver) {
+        Some(UpdateInfo {
+            version: tag_name.trim_start_matches('v').to_string(),
+            url: html_url.to_string(),
+        })
+    } else {
+        None
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -29,6 +75,8 @@ pub struct AppState {
     pub palette_hide: Arc<tokio::sync::Notify>,
     pub update_requested: Arc<tokio::sync::Notify>,
     pub update_status: Arc<tokio::sync::Mutex<String>>,
+    pub update_available: Arc<tokio::sync::Mutex<Option<UpdateInfo>>>,
+    pub embed_status: Arc<tokio::sync::Mutex<String>>,
     pub log: Arc<crate::session_log::SessionLog>,
 }
 
@@ -40,6 +88,8 @@ pub struct Application {
     palette_hide: Arc<tokio::sync::Notify>,
     update_requested: Arc<tokio::sync::Notify>,
     update_status: Arc<tokio::sync::Mutex<String>>,
+    pub update_available: Arc<tokio::sync::Mutex<Option<UpdateInfo>>>,
+    embed_status: Arc<tokio::sync::Mutex<String>>,
     pub log: Arc<crate::session_log::SessionLog>,
     pub state: AppState,
 }
@@ -58,6 +108,12 @@ impl Application {
         let palette_hide = Arc::new(tokio::sync::Notify::new());
         let update_requested = Arc::new(tokio::sync::Notify::new());
         let update_status = Arc::new(tokio::sync::Mutex::new(String::new()));
+        let update_available = Arc::new(tokio::sync::Mutex::new(None::<UpdateInfo>));
+        let embed_status = Arc::new(tokio::sync::Mutex::new(if embedder.is_some() {
+            "ready".to_string()
+        } else {
+            String::new()
+        }));
         let log = Arc::new(crate::session_log::SessionLog::new());
         let state = AppState {
             browser_db_path: config.browser.history_db_path.clone(),
@@ -70,6 +126,8 @@ impl Application {
             palette_hide: palette_hide.clone(),
             update_requested: update_requested.clone(),
             update_status: update_status.clone(),
+            update_available: update_available.clone(),
+            embed_status: embed_status.clone(),
             log: log.clone(),
         };
         let router = build_router(state.clone());
@@ -84,6 +142,8 @@ impl Application {
             palette_hide,
             update_requested,
             update_status,
+            update_available,
+            embed_status,
             log,
             state,
         })
@@ -107,6 +167,10 @@ impl Application {
 
     pub fn update_status(&self) -> Arc<tokio::sync::Mutex<String>> {
         self.update_status.clone()
+    }
+
+    pub fn embed_status(&self) -> Arc<tokio::sync::Mutex<String>> {
+        self.embed_status.clone()
     }
 
     pub async fn run_until_stopped(self) -> std::io::Result<()> {
@@ -171,6 +235,8 @@ fn build_router(state: AppState) -> Router {
         .route("/api/version", get(handlers::version))
         .route("/api/update/check", post(handlers::update_check))
         .route("/api/update/status", get(handlers::update_status))
+        .route("/api/update/available", get(handlers::update_available))
+        .route("/api/embed/status", get(handlers::embed_status))
         .route("/mcp", post(handlers::mcp_http))
         .layer(cors)
         .with_state(state)

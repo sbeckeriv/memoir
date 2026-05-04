@@ -1189,3 +1189,11 @@ pub async fn update_status(State(state): State<AppState>) -> Json<UpdateStatusRe
     let status = state.update_status.lock().await.clone();
     Json(UpdateStatusResponse { status })
 }
+
+pub async fn embed_status(State(state): State<AppState>) -> Json<String> {
+    Json(state.embed_status.lock().await.clone())
+}
+
+pub async fn update_available(State(state): State<AppState>) -> Json<Option<super::UpdateInfo>> {
+    Json(state.update_available.lock().await.clone())
+}

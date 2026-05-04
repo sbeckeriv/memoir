@@ -23,6 +23,8 @@ pub enum LlmProvider {
     LmStudio,
     Openai,
     Anthropic,
+    #[serde(rename = "none")]
+    Disabled,
 }
 
 fn home_dir() -> PathBuf {
@@ -56,6 +58,18 @@ fn serialize_path<S: serde::Serializer>(path: &Path, s: S) -> Result<S::Ok, S::E
     s.serialize_str(&path.to_string_lossy())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EmbedSettings {
+    pub enabled: bool,
+}
+
+impl Default for EmbedSettings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -65,6 +79,7 @@ pub struct Settings {
     pub fetch: FetchSettings,
     pub llm: LlmSettings,
     pub sync: SyncSettings,
+    pub embed: EmbedSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

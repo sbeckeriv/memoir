@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
@@ -12,9 +13,11 @@ pub struct Embedder {
 }
 
 impl Embedder {
-    pub fn try_new() -> anyhow::Result<Self> {
+    pub fn try_new(cache_dir: PathBuf) -> anyhow::Result<Self> {
         let model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(true),
+            InitOptions::new(EmbeddingModel::BGESmallENV15)
+                .with_show_download_progress(true)
+                .with_cache_dir(cache_dir),
         )?;
         Ok(Self {
             model: Mutex::new(model),
@@ -42,7 +45,7 @@ mod tests {
     #[test]
     #[ignore]
     fn embedder_produces_384_dim_vector() {
-        let embedder = Embedder::try_new().expect("model load failed");
+        let embedder = Embedder::try_new(std::env::temp_dir()).expect("model load failed");
         let vec = embedder.embed_one("hello world").unwrap();
         assert_eq!(vec.len(), 384);
         let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();

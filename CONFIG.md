@@ -166,8 +166,8 @@ max_context_chars = 8000
 
 | Key | Default | Description |
 |---|---|---|
-| `provider` | `lm_studio` | One of: `lm_studio`, `openai`, `anthropic` |
-| `base_url` | `http://localhost:1234` | API base URL. Ignored for `anthropic` |
+| `provider` | `lm_studio` | One of: `none`, `lm_studio`, `openai`, `anthropic`. Set to `none` to disable Ask and semantic search; also prevents the embedding model from being downloaded |
+| `base_url` | `http://localhost:1234` | API base URL. Ignored for `anthropic` and `none` |
 | `model` | `local-model` | Model name passed to the API |
 | `api_key` | *(unset)* | API key. Omit for local models |
 | `max_context_chars` | `8000` | Total characters of page content sent to the LLM per query (~2k tokens) |

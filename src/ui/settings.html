@@ -231,6 +231,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
     <div class="field">
       <label for="llm-provider">Provider</label>
       <select id="llm-provider">
+        <option value="none">None (disabled — no Ask, no semantic search)</option>
         <option value="lm_studio">LM Studio</option>
         <option value="openai">OpenAI-compatible</option>
         <option value="anthropic">Anthropic</option>
@@ -275,6 +276,9 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
         <label for="embed-batch">Embed batch size <span class="hint">pages per sync cycle</span></label>
         <input id="embed-batch" type="number" min="1" placeholder="200">
       </div>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="embed-enabled"> Enable semantic search <span class="hint">downloads ~130 MB embedding model on first use</span></label>
     </div>
   </div>
 
@@ -354,6 +358,7 @@ async function load() {
   document.getElementById('interval-mins').value = s.sync?.interval_mins ?? '';
   document.getElementById('fetch-batch').value = s.sync?.fetch_batch ?? '';
   document.getElementById('embed-batch').value = s.sync?.embed_batch ?? '';
+  document.getElementById('embed-enabled').checked = s.embed?.enabled ?? true;
 }
 
 async function save() {
@@ -401,6 +406,9 @@ async function save() {
       interval_mins: parseInt(document.getElementById('interval-mins').value, 10) || 60,
       fetch_batch: parseInt(document.getElementById('fetch-batch').value, 10) || 500,
       embed_batch: parseInt(document.getElementById('embed-batch').value, 10) || 200,
+    },
+    embed: {
+      enabled: document.getElementById('embed-enabled').checked,
     },
   };
 

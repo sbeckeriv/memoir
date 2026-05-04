@@ -38,6 +38,34 @@ header h1 a { display: block; }
 .header-nav a { color: #5b8af4; text-decoration: none; }
 .header-nav a:hover { text-decoration: underline; }
 
+.update-notice {
+  display: none;
+  align-items: center;
+  gap: 0.45rem;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 6px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.78rem;
+  color: #5a4700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.update-notice a { color: #5b8af4; text-decoration: none; }
+.update-notice a:hover { text-decoration: underline; }
+.update-now-btn {
+  background: #5b8af4;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.76rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+.update-now-btn:hover { background: #3d6eea; }
+.update-now-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .search-row {
   display: flex;
   flex: 1;
@@ -501,6 +529,11 @@ main {
     <button class="btn btn-search" id="btn-search">Search</button>
   </div>
   <span class="header-nav"><a href="/manage">Manage</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
+  <div id="update-notice" class="update-notice">
+    <span id="update-version"></span>
+    · <a id="update-url" href="#" target="_blank">Release notes</a>
+    · <button class="update-now-btn" id="update-now-btn">Update now</button>
+  </div>
 </header>
 <div id="stats-bar" class="stats-bar"></div>
 
@@ -514,6 +547,7 @@ main {
       </div>
       <button class="btn btn-ask" id="btn-ask">Ask</button>
     </div>
+    <div id="ask-hint" style="display:none;font-size:0.8rem;color:var(--text-muted,#888);margin-bottom:0.5rem"></div>
     <div class="spinner" id="ask-spinner"></div>
     <div id="ask-body"></div>
     <div class="spinner" id="spinner"></div>
@@ -783,13 +817,51 @@ async function deleteResult(btn) {
   if (r.ok || r.status === 204) { row.remove(); }
 }
 
+function updateAskState(embedStatus) {
+  const input = document.getElementById('ask-q');
+  const btn = document.getElementById('btn-ask');
+  const hint = document.getElementById('ask-hint');
+  const ready = embedStatus === 'ready';
+  input.disabled = !ready;
+  btn.disabled = !ready;
+  if (ready) {
+    input.placeholder = 'ask a question about these results…';
+    hint.style.display = 'none';
+    hint.innerHTML = '';
+  } else if (embedStatus === 'downloading') {
+    input.placeholder = 'embedding model is downloading…';
+    hint.style.display = 'none';
+  } else if (embedStatus === 'disabled') {
+    input.placeholder = 'semantic search is disabled';
+    hint.innerHTML = 'Enable semantic search in <a href="/settings">Settings</a> to use Ask.';
+    hint.style.display = 'block';
+  } else if (typeof embedStatus === 'string' && embedStatus.startsWith('error:')) {
+    input.placeholder = 'embedding model failed to load';
+    hint.innerHTML = 'Embedding model failed — check <a href="/log">Activity</a> for details, or enable it in <a href="/settings">Settings</a>.';
+    hint.style.display = 'block';
+  } else {
+    input.placeholder = 'ask a question about these results…';
+    hint.style.display = 'none';
+  }
+}
+
 async function loadStats() {
   try {
-    const r = await fetch('/api/stats');
-    const s = await r.json();
+    const [statsResp, embedResp] = await Promise.all([
+      fetch('/api/stats'),
+      fetch('/api/embed/status'),
+    ]);
+    const s = await statsResp.json();
+    const embedStatus = embedResp.ok ? await embedResp.json() : '';
+    updateAskState(embedStatus);
     const bar = document.getElementById('stats-bar');
-    bar.textContent =
-      `${s.total_pages.toLocaleString()} tracked · ${s.fetched.toLocaleString()} indexed · ${s.embedded.toLocaleString()} embedded · ${s.pending.toLocaleString()} pending`;
+    let text = `${s.total_pages.toLocaleString()} tracked · ${s.fetched.toLocaleString()} indexed · ${s.embedded.toLocaleString()} embedded · ${s.pending.toLocaleString()} pending`;
+    if (embedStatus === 'downloading') {
+      text += ' · downloading embedding model…';
+    } else if (typeof embedStatus === 'string' && embedStatus.startsWith('error:')) {
+      text += ' · semantic search unavailable';
+    }
+    bar.textContent = text;
     bar.style.display = 'block';
     return s.fetched;
   } catch { return null; }
@@ -877,6 +949,49 @@ async function startPolling() {
   }, pollSecs * 1000);
 }
 startPolling();
+
+(async function checkForUpdate() {
+  try {
+    const r = await fetch('/api/update/available');
+    if (!r.ok) return;
+    const info = await r.json();
+    if (!info || !info.version) return;
+    document.getElementById('update-version').textContent = 'v' + info.version + ' available';
+    document.getElementById('update-url').href = info.url;
+    const notice = document.getElementById('update-notice');
+    notice.style.display = 'flex';
+    document.getElementById('update-now-btn').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = 'Checking…';
+      try {
+        await fetch('/api/update/check', { method: 'POST' });
+        let polls = 0;
+        const timer = setInterval(async () => {
+          if (++polls > 60) { clearInterval(timer); return; }
+          try {
+            const sr = await fetch('/api/update/status');
+            const { status } = await sr.json();
+            if (status.startsWith('installing:')) {
+              btn.textContent = 'Installing…';
+            } else if (status === 'up_to_date') {
+              btn.textContent = '✓ Up to date';
+              clearInterval(timer);
+              setTimeout(() => { notice.style.display = 'none'; }, 2000);
+            } else if (status.startsWith('error:')) {
+              btn.textContent = 'Failed';
+              btn.disabled = false;
+              clearInterval(timer);
+            }
+          } catch {}
+        }, 1000);
+      } catch {
+        btn.disabled = false;
+        btn.textContent = 'Update now';
+      }
+    });
+  } catch {}
+})();
 
 const DISMISSED_KEY = 'memoir_dismissed_clusters';
 

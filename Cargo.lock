@@ -2954,7 +2954,7 @@ dependencies = [
 
 [[package]]
 name = "memoir"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "anyhow",
  "axum",
@@ -2978,7 +2978,7 @@ dependencies = [
 
 [[package]]
 name = "memoir-app"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "memoir",
  "serde_json",

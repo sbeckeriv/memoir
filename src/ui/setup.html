@@ -414,8 +414,8 @@
       <div class="actions">
         <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
         <div class="actions-right">
-          <button class="btn btn-secondary" onclick="skipLlm()">Skip</button>
-          <button class="btn btn-primary" onclick="goStep(3)">Continue →</button>
+          <button class="btn btn-secondary" onclick="skipLlm()">Skip (no LLM or semantic search)</button>
+          <button class="btn btn-primary" onclick="llmSkipped = false; goStep(3)">Continue →</button>
         </div>
       </div>
     </div>
@@ -470,6 +470,8 @@
 
 <script>
 let selectedBrowserPath = '';
+let selectedBrowserKind = '';
+let llmSkipped = false;
 let currentStep = 1;
 const TOTAL_STEPS = 4;
 
@@ -512,18 +514,19 @@ function renderBrowserList(browsers) {
       <span class="badge ${b.exists ? 'badge-found' : 'badge-missing'}">${b.exists ? 'found' : 'not found'}</span>
     `;
     if (b.exists) {
-      el.onclick = () => selectBrowser(el, b.path);
+      el.onclick = () => selectBrowser(el, b.path, b.kind);
       // Auto-select first found browser
-      if (!selectedBrowserPath) selectBrowser(el, b.path);
+      if (!selectedBrowserPath) selectBrowser(el, b.path, b.kind);
     }
     list.appendChild(el);
   }
 }
 
-function selectBrowser(el, path) {
+function selectBrowser(el, path, kind) {
   document.querySelectorAll('.browser-option').forEach(e => e.classList.remove('selected'));
   el.classList.add('selected');
   selectedBrowserPath = path;
+  selectedBrowserKind = kind || '';
   document.getElementById('step1-next').disabled = false;
 }
 
@@ -576,6 +579,7 @@ function validateStep(n) {
 function skipLlm() {
   document.getElementById('llm-url').value = '';
   document.getElementById('llm-model').value = '';
+  llmSkipped = true;
   goStep(3);
 }
 
@@ -618,6 +622,8 @@ async function finishSetup() {
 
   const payload = {
     browser_path: selectedBrowserPath,
+    browser_kind: selectedBrowserKind,
+    llm_provider: llmSkipped ? 'none' : '',
     data_dir: document.getElementById('data-dir').value.trim(),
     llm_base_url: document.getElementById('llm-url').value.trim() || 'http://localhost:1234',
     llm_model: document.getElementById('llm-model').value.trim() || 'local-model',

@@ -104,6 +104,15 @@ pub fn run() {
                         let log = server.log.clone();
                         log_tx.send(log.clone()).ok();
 
+                        // Startup update check — stores result for the web UI banner.
+                        let update_available = server.update_available.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let current_ver = env!("CARGO_PKG_VERSION");
+                            if let Some(info) = memoir::check_latest_release(current_ver).await {
+                                *update_available.lock().await = Some(info);
+                            }
+                        });
+
                         // Drive palette hide signals from Axum to the Tauri window.
                         let palette_notify = server.palette_hide();
                         let ah_for_palette = ah_for_server.clone();
@@ -194,13 +203,56 @@ pub fn run() {
 
                         // Kick off the initial sync with embedder in background.
                         let log_init = log.clone();
+                        let embed_status = server.embed_status();
                         tauri::async_runtime::spawn(async move {
-                            let embedder =
-                                tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
-                                    .await
-                                    .ok()
-                                    .flatten()
-                                    .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
+                            let embedder = if config.embed.enabled {
+                                *embed_status.lock().await = "downloading".to_string();
+                                log_init.push(
+                                    memoir::LogKind::Sync,
+                                    "Downloading embedding model",
+                                    None,
+                                );
+                                let cache = memoir::Settings::config_dir().join("models");
+                                match tokio::task::spawn_blocking(move || {
+                                    memoir::Embedder::try_new(cache)
+                                })
+                                .await
+                                {
+                                    Ok(Ok(e)) => {
+                                        *embed_status.lock().await = "ready".to_string();
+                                        log_init.push(
+                                            memoir::LogKind::Sync,
+                                            "Embedding model ready",
+                                            None,
+                                        );
+                                        Some(Arc::new(e) as Arc<dyn memoir::EmbedText>)
+                                    }
+                                    Ok(Err(err)) => {
+                                        let msg = err.to_string();
+                                        tracing::warn!(error = %msg, "embedding model unavailable");
+                                        log_init.push(
+                                            memoir::LogKind::Error,
+                                            "Embedding model unavailable",
+                                            msg.clone(),
+                                        );
+                                        *embed_status.lock().await = format!("error: {msg}");
+                                        None
+                                    }
+                                    Err(_) => {
+                                        log_init.push(
+                                            memoir::LogKind::Error,
+                                            "Embedding model unavailable",
+                                            "task panicked".to_string(),
+                                        );
+                                        *embed_status.lock().await =
+                                            "error: task panicked".to_string();
+                                        None
+                                    }
+                                }
+                            } else {
+                                *embed_status.lock().await = "disabled".to_string();
+                                None
+                            };
 
                             if let Err(e) =
                                 memoir::sync::run(&config, embedder, Some(log_init)).await
@@ -279,11 +331,21 @@ pub fn run() {
                         continue;
                     }
 
-                    let embedder = tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
+                    let embedder = if config.embed.enabled {
+                        let cache = memoir::Settings::config_dir().join("models");
+                        match tokio::task::spawn_blocking(move || memoir::Embedder::try_new(cache))
+                            .await
+                        {
+                            Ok(Ok(e)) => Some(Arc::new(e) as Arc<dyn memoir::EmbedText>),
+                            Ok(Err(err)) => {
+                                tracing::warn!(error = %err, "embedding model unavailable");
+                                None
+                            }
+                            Err(_) => None,
+                        }
+                    } else {
+                        None
+                    };
 
                     if let Err(e) = memoir::sync::run(&config, embedder, Some(log.clone())).await {
                         tracing::warn!(error = %e, "scheduled sync failed");
@@ -390,12 +452,19 @@ fn build_tray(
                 let log_tray = log.clone();
                 tauri::async_runtime::spawn(async move {
                     let config = memoir::Settings::load();
-                    let embedder = tokio::task::spawn_blocking(|| memoir::Embedder::try_new().ok())
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|e| Arc::new(e) as Arc<dyn memoir::EmbedText>);
-
+                    let embedder = if config.embed.enabled {
+                        let cache = memoir::Settings::config_dir().join("models");
+                        match tokio::task::spawn_blocking(move || memoir::Embedder::try_new(cache)).await {
+                            Ok(Ok(e)) => Some(Arc::new(e) as Arc<dyn memoir::EmbedText>),
+                            Ok(Err(err)) => {
+                                tracing::warn!(error = %err, "embedding model unavailable");
+                                None
+                            }
+                            Err(_) => None,
+                        }
+                    } else {
+                        None
+                    };
                     if let Err(e) = memoir::sync::run(&config, embedder, Some(log_tray)).await {
                         tracing::warn!(error = %e, "manual index failed");
                     }

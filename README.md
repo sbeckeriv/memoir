@@ -118,10 +118,13 @@ Hotkey popup:
 
 ## LLM support
 
-memoir uses the OpenAI-compatible `/v1/chat/completions` endpoint by default, and the Anthropic Messages API when `provider = "anthropic"`. The LLM is optional — full-text search and semantic search work without it.
+memoir uses the OpenAI-compatible `/v1/chat/completions` endpoint by default, and the Anthropic Messages API when `provider = "anthropic"`. The LLM is optional — full-text search works without it.
+
+Set `provider = "none"` to disable the LLM and semantic search entirely. This also prevents the embedding model from being downloaded.
 
 | Server | `provider` value | Notes |
 |--------|-----------------|-------|
+| None | `none` | Disables Ask and semantic search. No embedding model is downloaded |
 | [LM Studio](https://lmstudio.ai) | `lm_studio` | Default. memoir auto-loads the model at startup via the LM Studio REST API |
 | [Ollama](https://ollama.com) | `lm_studio` | Point `base_url` at `http://localhost:11434` |
 | Any OpenAI-compatible server | `openai` | Set `base_url` and `model` in config |
@@ -394,7 +397,7 @@ ban = ["web.archive.org", "mail.google.com"]
 # custom_css = ""   # CSS applied to all pages — see HTML.md for available classes
 
 [llm]
-provider = "lm_studio"              # lm_studio | openai | anthropic
+provider = "lm_studio"              # none | lm_studio | openai | anthropic
 base_url = "http://localhost:1234"  # LM Studio default
 model = "local-model"               # must match the model key in LM Studio
 # api_key = "sk-..."                # required for OpenAI / Anthropic
@@ -415,7 +418,7 @@ For the full option reference see [CONFIG.md](CONFIG.md). For CSS class names av
 
 2. Fetched pages are stored in `index.db` and inserted into an FTS5 virtual table for BM25-ranked full-text search.
 
-3. After fetching, the embedding model (BAAI/bge-small-en-v1.5 via ONNX Runtime) encodes each page's title + body into a 384-dimensional vector stored as a BLOB. The model runs entirely locally.
+3. After fetching, the embedding model (BAAI/bge-small-en-v1.5 via ONNX Runtime, ~130 MB, downloaded from HuggingFace on first run) encodes each page's title + body into a 384-dimensional vector stored as a BLOB. The model runs entirely locally. Set `provider = "none"` in `[llm]` to skip the download entirely — full-text search still works, but semantic search and Ask are disabled.
 
 4. **Search** queries the FTS5 index and returns ranked results with highlighted snippets. Semantic search re-ranks results using cosine similarity (minimum score: 0.3).
 

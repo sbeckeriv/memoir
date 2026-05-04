@@ -98,7 +98,7 @@ impl LlmClient {
     }
 
     /// For LM Studio: checks if the model is loaded and triggers loading if not.
-    /// Skips silently for openai/anthropic providers.
+    /// Skips silently for openai/anthropic/disabled providers.
     pub async fn ensure_loaded(&self) {
         if self.provider != LlmProvider::LmStudio {
             return;
@@ -168,6 +168,7 @@ impl LlmClient {
         system_prompt: Option<&str>,
     ) -> anyhow::Result<String> {
         match self.provider {
+            LlmProvider::Disabled => anyhow::bail!("LLM is disabled (provider = \"none\")"),
             LlmProvider::Anthropic => self.generate_anthropic(prompt, system_prompt).await,
             _ => self.generate_openai(prompt, system_prompt).await,
         }

@@ -17,5 +17,5 @@ pub use config::{
 pub use embed::{EmbedText, Embedder};
 pub use index::{FetchStatus, IndexStore, PageEntry, SearchResult, Stats, VectorResult};
 pub use rag::{AskResponse, LlmClient};
-pub use server::Application;
+pub use server::{Application, UpdateInfo, check_latest_release};
 pub use session_log::{LogKind, SessionLog};
