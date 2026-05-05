@@ -532,7 +532,7 @@ main {
   <div id="update-notice" class="update-notice">
     <span id="update-version"></span>
     · <a id="update-url" href="#" target="_blank">Release notes</a>
-    · <button class="update-now-btn" id="update-now-btn">Update now</button>
+    · <button class="update-now-btn" id="update-now-btn">Download update</button>
   </div>
 </header>
 <div id="stats-bar" class="stats-bar"></div>
@@ -847,12 +847,14 @@ function updateAskState(embedStatus) {
 
 async function loadStats() {
   try {
-    const [statsResp, embedResp] = await Promise.all([
+    const [statsResp, embedResp, syncResp] = await Promise.all([
       fetch('/api/stats'),
       fetch('/api/embed/status'),
+      fetch('/api/sync/status'),
     ]);
     const s = await statsResp.json();
     const embedStatus = embedResp.ok ? await embedResp.json() : '';
+    const syncStatus = syncResp.ok ? await syncResp.json() : null;
     updateAskState(embedStatus);
     const bar = document.getElementById('stats-bar');
     let text = `${s.total_pages.toLocaleString()} tracked · ${s.fetched.toLocaleString()} indexed · ${s.embedded.toLocaleString()} embedded · ${s.pending.toLocaleString()} pending`;
@@ -860,6 +862,22 @@ async function loadStats() {
       text += ' · downloading embedding model…';
     } else if (typeof embedStatus === 'string' && embedStatus.startsWith('error:')) {
       text += ' · semantic search unavailable';
+    }
+    if (syncStatus?.last_sync_at) {
+      const d = new Date(syncStatus.last_sync_at * 1000);
+      const now = Date.now();
+      const diffMs = now - d.getTime();
+      let ago;
+      if (diffMs < 60000) {
+        ago = 'just now';
+      } else if (diffMs < 3600000) {
+        ago = `${Math.floor(diffMs / 60000)}m ago`;
+      } else if (diffMs < 86400000) {
+        ago = `${Math.floor(diffMs / 3600000)}h ago`;
+      } else {
+        ago = d.toLocaleDateString();
+      }
+      text += ` · synced ${ago}`;
     }
     bar.textContent = text;
     bar.style.display = 'block';
@@ -960,34 +978,70 @@ startPolling();
     document.getElementById('update-url').href = info.url;
     const notice = document.getElementById('update-notice');
     notice.style.display = 'flex';
-    document.getElementById('update-now-btn').addEventListener('click', async function() {
-      const btn = this;
+    const btn = document.getElementById('update-now-btn');
+
+    function startPolling() {
+      let polls = 0;
+      const timer = setInterval(async () => {
+        if (++polls > 120) { clearInterval(timer); return; }
+        try {
+          const sr = await fetch('/api/update/status');
+          const { status } = await sr.json();
+          if (status === 'downloading') {
+            btn.textContent = 'Downloading…';
+          } else if (status.startsWith('downloaded:')) {
+            clearInterval(timer);
+            btn.textContent = 'Restart to apply';
+            btn.disabled = false;
+            btn.onclick = async function() {
+              btn.disabled = true;
+              btn.textContent = 'Restarting…';
+              await fetch('/api/update/restart', { method: 'POST' });
+            };
+          } else if (status.startsWith('installing:')) {
+            btn.textContent = 'Restarting…';
+          } else if (status === 'up_to_date') {
+            clearInterval(timer);
+            btn.textContent = '✓ Up to date';
+            setTimeout(() => { notice.style.display = 'none'; }, 2000);
+          } else if (status.startsWith('error:')) {
+            clearInterval(timer);
+            btn.textContent = 'Failed';
+            btn.disabled = false;
+          }
+        } catch {}
+      }, 1000);
+    }
+
+    // If an auto-download is already in progress or done, pick it up immediately.
+    try {
+      const sr = await fetch('/api/update/status');
+      const { status } = await sr.json();
+      if (status.startsWith('downloaded:')) {
+        btn.textContent = 'Restart to apply';
+        btn.onclick = async function() {
+          btn.disabled = true;
+          btn.textContent = 'Restarting…';
+          await fetch('/api/update/restart', { method: 'POST' });
+        };
+        return;
+      } else if (status === 'downloading') {
+        btn.disabled = true;
+        btn.textContent = 'Downloading…';
+        startPolling();
+        return;
+      }
+    } catch {}
+
+    btn.addEventListener('click', async function() {
       btn.disabled = true;
       btn.textContent = 'Checking…';
       try {
         await fetch('/api/update/check', { method: 'POST' });
-        let polls = 0;
-        const timer = setInterval(async () => {
-          if (++polls > 60) { clearInterval(timer); return; }
-          try {
-            const sr = await fetch('/api/update/status');
-            const { status } = await sr.json();
-            if (status.startsWith('installing:')) {
-              btn.textContent = 'Installing…';
-            } else if (status === 'up_to_date') {
-              btn.textContent = '✓ Up to date';
-              clearInterval(timer);
-              setTimeout(() => { notice.style.display = 'none'; }, 2000);
-            } else if (status.startsWith('error:')) {
-              btn.textContent = 'Failed';
-              btn.disabled = false;
-              clearInterval(timer);
-            }
-          } catch {}
-        }, 1000);
+        startPolling();
       } catch {
         btn.disabled = false;
-        btn.textContent = 'Update now';
+        btn.textContent = 'Download update';
       }
     });
   } catch {}

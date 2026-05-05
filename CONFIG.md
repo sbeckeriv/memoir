@@ -187,3 +187,16 @@ embed_batch = 200
 | `interval_mins` | `60` | How often the background sync runs, in minutes |
 | `fetch_batch` | `500` | Max URLs fetched per sync cycle |
 | `embed_batch` | `200` | Max pages embedded per sync cycle |
+
+## `[embed]`
+
+```toml
+[embed]
+enabled = true
+vector_search = true
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `enabled` | `true` | Download and run the local embedding model (BAAI/bge-small-en-v1.5). Set to `false` to skip embedding entirely |
+| `vector_search` | `true` | Use vector (semantic) search to augment keyword results on the search page. When on, results are ranked by cosine similarity first, with BM25 keyword hits appended. Automatically disabled if `enabled = false` or no embedder is loaded. Set to `false` to use keyword-only search |

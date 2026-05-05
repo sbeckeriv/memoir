@@ -26,6 +26,8 @@ const INIT_SCRIPT: &str = r#"(function(){
     }, true);
 })();"#;
 
+type PendingUpdate = Arc<tokio::sync::Mutex<Option<(tauri_plugin_updater::Update, Vec<u8>)>>>;
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -40,6 +42,11 @@ pub fn run() {
     let sp_server = sync_paused.clone();
     let sp_loop = sync_paused.clone();
     let sp_tray = sync_paused.clone();
+
+    let pending_update: PendingUpdate = Arc::new(tokio::sync::Mutex::new(None));
+    // Shared handle to the tray "Restart to Apply" item, set after build_tray runs.
+    let restart_item_shared: Arc<std::sync::Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>> =
+        Arc::new(std::sync::Mutex::new(None));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
@@ -91,6 +98,9 @@ pub fn run() {
             let (port_tx, port_rx) = std::sync::mpsc::channel::<u16>();
             let (log_tx, log_rx) = std::sync::mpsc::channel::<Arc<memoir::SessionLog>>();
 
+            let pending_server = pending_update.clone();
+            let restart_item_server = restart_item_shared.clone();
+
             // Start Axum server without waiting for embedder (fast startup).
             // Sync + embedding runs in a separate background task afterward.
             tauri::async_runtime::spawn(async move {
@@ -104,14 +114,74 @@ pub fn run() {
                         let log = server.log.clone();
                         log_tx.send(log.clone()).ok();
 
-                        // Startup update check — stores result for the web UI banner.
-                        let update_available = server.update_available.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let current_ver = env!("CARGO_PKG_VERSION");
-                            if let Some(info) = memoir::check_latest_release(current_ver).await {
-                                *update_available.lock().await = Some(info);
-                            }
-                        });
+                        // Startup: auto-download the update silently; apply on next restart.
+                        {
+                            use tauri_plugin_updater::UpdaterExt;
+                            let ah_auto = ah_for_server.clone();
+                            let update_available = server.update_available.clone();
+                            let update_status_auto = server.update_status();
+                            let pending_auto = pending_server.clone();
+                            let restart_item_auto = restart_item_server.clone();
+                            let log_auto = log.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let updater = match ah_auto.updater() {
+                                    Ok(u) => u,
+                                    Err(e) => {
+                                        tracing::debug!(error = %e, "updater unavailable at startup");
+                                        return;
+                                    }
+                                };
+                                match updater.check().await {
+                                    Ok(Some(update)) => {
+                                        let ver = update.version.clone();
+                                        *update_available.lock().await =
+                                            Some(memoir::UpdateInfo {
+                                                version: ver.clone(),
+                                                url: format!(
+                                                    "https://github.com/sbeckeriv/memoir/releases/tag/v{ver}"
+                                                ),
+                                            });
+                                        log_auto.push(
+                                            memoir::LogKind::Sync,
+                                            format!("Update v{ver} available, downloading…"),
+                                            None,
+                                        );
+                                        *update_status_auto.lock().await =
+                                            "downloading".to_string();
+                                        match update.download(|_, _| {}, || {}).await {
+                                            Ok(bytes) => {
+                                                *pending_auto.lock().await =
+                                                    Some((update, bytes));
+                                                *update_status_auto.lock().await =
+                                                    format!("downloaded:{ver}");
+                                                log_auto.push(
+                                                    memoir::LogKind::Sync,
+                                                    format!("Update v{ver} downloaded, restart to apply"),
+                                                    None,
+                                                );
+                                                if let Ok(guard) = restart_item_auto.lock() {
+                                                    if let Some(item) = guard.as_ref() {
+                                                        let _ = item.set_enabled(true);
+                                                        let _ = item.set_text(format!(
+                                                            "Restart to Apply (v{ver})"
+                                                        ));
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "auto update download failed");
+                                                *update_status_auto.lock().await =
+                                                    format!("error:{e}");
+                                            }
+                                        }
+                                    }
+                                    Ok(None) => {}
+                                    Err(e) => {
+                                        tracing::debug!(error = %e, "startup update check failed");
+                                    }
+                                }
+                            });
+                        }
 
                         // Drive palette hide signals from Axum to the Tauri window.
                         let palette_notify = server.palette_hide();
@@ -125,10 +195,13 @@ pub fn run() {
                             }
                         });
 
-                        // Handle update-check requests from the web UI.
+                        // Handle update-check requests from the web UI: download only.
                         let update_requested = server.update_requested();
                         let update_status = server.update_status();
                         let update_log = server.log.clone();
+                        let pending_check = pending_server.clone();
+                        let restart_item_check = restart_item_server.clone();
+                        let ah_restart = ah_for_server.clone();
                         tauri::async_runtime::spawn(async move {
                             use tauri_plugin_updater::UpdaterExt;
                             loop {
@@ -148,23 +221,31 @@ pub fn run() {
                                                 None,
                                             );
                                             *update_status.lock().await =
-                                                format!("installing:{ver}");
-                                            match update
-                                                .download_and_install(|_, _| {}, || {})
-                                                .await
-                                            {
-                                                Ok(()) => {
+                                                "downloading".to_string();
+                                            match update.download(|_, _| {}, || {}).await {
+                                                Ok(bytes) => {
+                                                    *pending_check.lock().await =
+                                                        Some((update, bytes));
+                                                    *update_status.lock().await =
+                                                        format!("downloaded:{ver}");
                                                     update_log.push(
                                                         memoir::LogKind::Sync,
-                                                        "Update installed, restarting",
+                                                        format!("Update v{ver} downloaded, restart to apply"),
                                                         None,
                                                     );
-                                                    ah_for_server.restart();
+                                                    if let Ok(guard) = restart_item_check.lock() {
+                                                        if let Some(item) = guard.as_ref() {
+                                                            let _ = item.set_enabled(true);
+                                                            let _ = item.set_text(format!(
+                                                                "Restart to Apply (v{ver})"
+                                                            ));
+                                                        }
+                                                    }
                                                 }
                                                 Err(e) => {
                                                     update_log.push(
                                                         memoir::LogKind::Error,
-                                                        "Update install failed",
+                                                        "Update download failed",
                                                         e.to_string(),
                                                     );
                                                     *update_status.lock().await =
@@ -178,7 +259,8 @@ pub fn run() {
                                                 "Already up to date",
                                                 None,
                                             );
-                                            *update_status.lock().await = "up_to_date".to_string();
+                                            *update_status.lock().await =
+                                                "up_to_date".to_string();
                                         }
                                         Err(e) => {
                                             update_log.push(
@@ -196,6 +278,47 @@ pub fn run() {
                                             e.to_string(),
                                         );
                                         *update_status.lock().await = format!("error:{e}");
+                                    }
+                                }
+                            }
+                        });
+
+                        // Handle restart requests from the web UI: install pending update.
+                        let restart_requested = server.restart_requested();
+                        let update_status_restart = server.update_status();
+                        let restart_log = server.log.clone();
+                        let pending_restart = pending_server.clone();
+                        tauri::async_runtime::spawn(async move {
+                            loop {
+                                restart_requested.notified().await;
+                                let pending = pending_restart.lock().await.take();
+                                if let Some((update, bytes)) = pending {
+                                    let ver = update.version.clone();
+                                    *update_status_restart.lock().await =
+                                        format!("installing:{ver}");
+                                    restart_log.push(
+                                        memoir::LogKind::Sync,
+                                        format!("Applying update v{ver}"),
+                                        None,
+                                    );
+                                    match update.install(bytes) {
+                                        Ok(()) => {
+                                            restart_log.push(
+                                                memoir::LogKind::Sync,
+                                                "Update installed, restarting",
+                                                None,
+                                            );
+                                            ah_restart.restart();
+                                        }
+                                        Err(e) => {
+                                            restart_log.push(
+                                                memoir::LogKind::Error,
+                                                "Update install failed",
+                                                e.to_string(),
+                                            );
+                                            *update_status_restart.lock().await =
+                                                format!("error:{e}");
+                                        }
                                     }
                                 }
                             }
@@ -318,7 +441,7 @@ pub fn run() {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             app.global_shortcut().register(hotkey.as_str())?;
 
-            build_tray(app, sp_tray, port, log.clone())?;
+            build_tray(app, sp_tray, port, log.clone(), pending_update.clone(), restart_item_shared.clone())?;
 
             // Background sync loop — interval is re-read from config each cycle.
             tauri::async_runtime::spawn(async move {
@@ -396,6 +519,8 @@ fn build_tray(
     sync_paused: Arc<AtomicBool>,
     port: u16,
     log: Arc<memoir::SessionLog>,
+    pending_update: PendingUpdate,
+    restart_item_shared: Arc<std::sync::Mutex<Option<MenuItem<tauri::Wry>>>>,
 ) -> tauri::Result<()> {
     use tauri_plugin_autostart::ManagerExt;
 
@@ -420,8 +545,21 @@ fn build_tray(
         true,
         None::<&str>,
     )?;
+    // Disabled until an update has been downloaded.
+    let restart_update = MenuItem::with_id(
+        app,
+        "restart_update",
+        "Restart to Apply Update",
+        false,
+        None::<&str>,
+    )?;
     let sep3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+    // Store the restart item so background tasks can enable it when ready.
+    if let Ok(mut guard) = restart_item_shared.lock() {
+        *guard = Some(restart_update.clone());
+    }
 
     let menu = Menu::with_items(
         app,
@@ -434,6 +572,7 @@ fn build_tray(
             &sep2,
             &autolaunch,
             &check_updates,
+            &restart_update,
             &sep3,
             &quit,
         ],
@@ -442,6 +581,8 @@ fn build_tray(
     let pause_item = pause_idx.clone();
     let autolaunch_item = autolaunch.clone();
     let check_updates_item = check_updates.clone();
+    let restart_item_tray = restart_update.clone();
+    let pending_tray = pending_update.clone();
 
     TrayIconBuilder::new()
         .tooltip("Memoir")
@@ -459,7 +600,11 @@ fn build_tray(
                     let embedder = if config.embed.enabled {
                         let cache = memoir::Settings::config_dir().join("models");
                         let model = config.embed.model;
-                        match tokio::task::spawn_blocking(move || memoir::Embedder::try_new(cache, model)).await {
+                        match tokio::task::spawn_blocking(move || {
+                            memoir::Embedder::try_new(cache, model)
+                        })
+                        .await
+                        {
                             Ok(Ok(e)) => Some(Arc::new(e) as Arc<dyn memoir::EmbedText>),
                             Ok(Err(err)) => {
                                 tracing::warn!(error = %err, "embedding model unavailable");
@@ -503,30 +648,45 @@ fn build_tray(
                 use tauri_plugin_updater::UpdaterExt;
                 let app = app.clone();
                 let item = check_updates_item.clone();
+                let restart_item = restart_item_tray.clone();
                 let log_upd = log.clone();
+                let pending = pending_tray.clone();
                 tauri::async_runtime::spawn(async move {
                     let _ = item.set_text("Checking…");
                     log_upd.push(memoir::LogKind::Sync, "Update check started", None);
                     match app.updater() {
                         Ok(updater) => match updater.check().await {
                             Ok(Some(update)) => {
-                                tracing::info!(version = %update.version, "update available, installing");
-                                let _ = item.set_text("Updating…");
+                                let ver = update.version.clone();
+                                tracing::info!(version = %ver, "update available, downloading");
+                                let _ = item.set_text("Downloading…");
                                 log_upd.push(
                                     memoir::LogKind::Sync,
-                                    format!("Update available: v{}", update.version),
+                                    format!("Update available: v{ver}"),
                                     None,
                                 );
-                                match update.download_and_install(|_, _| {}, || {}).await {
-                                    Ok(()) => {
-                                        tracing::info!("update installed, restarting");
-                                        log_upd.push(memoir::LogKind::Sync, "Update installed, restarting", None);
-                                        app.restart();
+                                match update.download(|_, _| {}, || {}).await {
+                                    Ok(bytes) => {
+                                        *pending.lock().await = Some((update, bytes));
+                                        log_upd.push(
+                                            memoir::LogKind::Sync,
+                                            format!("Update v{ver} downloaded, restart to apply"),
+                                            None,
+                                        );
+                                        let _ = restart_item.set_enabled(true);
+                                        let _ = restart_item
+                                            .set_text(format!("Restart to Apply (v{ver})"));
+                                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                        let _ = item.set_text("Check for Updates…");
                                     }
                                     Err(e) => {
-                                        tracing::warn!(error = %e, "update install failed");
-                                        log_upd.push(memoir::LogKind::Error, "Update install failed", e.to_string());
-                                        let _ = item.set_text("Update failed");
+                                        tracing::warn!(error = %e, "update download failed");
+                                        log_upd.push(
+                                            memoir::LogKind::Error,
+                                            "Update download failed",
+                                            e.to_string(),
+                                        );
+                                        let _ = item.set_text("Download failed");
                                         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
                                         let _ = item.set_text("Check for Updates…");
                                     }
@@ -541,7 +701,11 @@ fn build_tray(
                             }
                             Err(e) => {
                                 tracing::warn!(error = %e, "update check failed");
-                                log_upd.push(memoir::LogKind::Error, "Update check failed", e.to_string());
+                                log_upd.push(
+                                    memoir::LogKind::Error,
+                                    "Update check failed",
+                                    e.to_string(),
+                                );
                                 let _ = item.set_text("Check failed");
                                 tokio::time::sleep(std::time::Duration::from_secs(4)).await;
                                 let _ = item.set_text("Check for Updates…");
@@ -549,8 +713,30 @@ fn build_tray(
                         },
                         Err(e) => {
                             tracing::warn!(error = %e, "updater unavailable");
-                            log_upd.push(memoir::LogKind::Error, "Updater unavailable", e.to_string());
+                            log_upd.push(
+                                memoir::LogKind::Error,
+                                "Updater unavailable",
+                                e.to_string(),
+                            );
                             let _ = item.set_text("Check for Updates…");
+                        }
+                    }
+                });
+            }
+
+            "restart_update" => {
+                let app = app.clone();
+                let pending = pending_tray.clone();
+                tauri::async_runtime::spawn(async move {
+                    let entry = pending.lock().await.take();
+                    if let Some((update, bytes)) = entry {
+                        let ver = update.version.clone();
+                        tracing::info!(version = %ver, "applying downloaded update");
+                        match update.install(bytes) {
+                            Ok(()) => app.restart(),
+                            Err(e) => {
+                                tracing::warn!(error = %e, "update install failed");
+                            }
                         }
                     }
                 });

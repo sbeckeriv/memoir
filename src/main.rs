@@ -68,14 +68,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let cfg = config.clone();
                 let emb = embedder.clone();
                 let log = app.log.clone();
+                let last_sync_at = app.state.last_sync_at.clone();
                 tokio::spawn(async move {
                     if let Err(e) = memoir::sync::run(&cfg, emb, Some(log)).await {
                         tracing::warn!(error = %e, "startup sync failed");
+                    } else {
+                        let ts = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+                        last_sync_at.store(ts, std::sync::atomic::Ordering::Relaxed);
                     }
                 });
 
                 let sp = sync_paused.clone();
                 let log = app.log.clone();
+                let last_sync_at = app.state.last_sync_at.clone();
                 tokio::spawn(async move {
                     loop {
                         let cfg = Settings::load();
@@ -87,6 +95,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         let embedder = load_embedder(&cfg).await;
                         if let Err(e) = memoir::sync::run(&cfg, embedder, Some(log.clone())).await {
                             tracing::warn!(error = %e, "scheduled sync failed");
+                        } else {
+                            let ts = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_secs() as i64)
+                                .unwrap_or(0);
+                            last_sync_at.store(ts, std::sync::atomic::Ordering::Relaxed);
                         }
                     }
                 });

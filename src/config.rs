@@ -83,6 +83,7 @@ pub enum EmbedModel {
 pub struct EmbedSettings {
     pub enabled: bool,
     pub model: EmbedModel,
+    pub vector_search: bool,
 }
 
 impl Default for EmbedSettings {
@@ -90,6 +91,7 @@ impl Default for EmbedSettings {
         Self {
             enabled: true,
             model: EmbedModel::default(),
+            vector_search: true,
         }
     }
 }

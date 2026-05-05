@@ -1,7 +1,7 @@
 mod handlers;
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Arc, RwLock};
 
 use axum::http::{Method, header};
@@ -76,7 +76,9 @@ pub struct AppState {
     pub update_requested: Arc<tokio::sync::Notify>,
     pub update_status: Arc<tokio::sync::Mutex<String>>,
     pub update_available: Arc<tokio::sync::Mutex<Option<UpdateInfo>>>,
+    pub restart_requested: Arc<tokio::sync::Notify>,
     pub embed_status: Arc<tokio::sync::Mutex<String>>,
+    pub last_sync_at: Arc<AtomicI64>,
     pub log: Arc<crate::session_log::SessionLog>,
 }
 
@@ -89,6 +91,7 @@ pub struct Application {
     update_requested: Arc<tokio::sync::Notify>,
     update_status: Arc<tokio::sync::Mutex<String>>,
     pub update_available: Arc<tokio::sync::Mutex<Option<UpdateInfo>>>,
+    restart_requested: Arc<tokio::sync::Notify>,
     embed_status: Arc<tokio::sync::Mutex<String>>,
     pub log: Arc<crate::session_log::SessionLog>,
     pub state: AppState,
@@ -109,12 +112,14 @@ impl Application {
         let update_requested = Arc::new(tokio::sync::Notify::new());
         let update_status = Arc::new(tokio::sync::Mutex::new(String::new()));
         let update_available = Arc::new(tokio::sync::Mutex::new(None::<UpdateInfo>));
+        let restart_requested = Arc::new(tokio::sync::Notify::new());
         let embed_status = Arc::new(tokio::sync::Mutex::new(if embedder.is_some() {
             "ready".to_string()
         } else {
             String::new()
         }));
         let log = Arc::new(crate::session_log::SessionLog::new());
+        let last_sync_at = Arc::new(AtomicI64::new(0));
         let state = AppState {
             browser_db_path: config.browser.history_db_path.clone(),
             browser,
@@ -127,7 +132,9 @@ impl Application {
             update_requested: update_requested.clone(),
             update_status: update_status.clone(),
             update_available: update_available.clone(),
+            restart_requested: restart_requested.clone(),
             embed_status: embed_status.clone(),
+            last_sync_at: last_sync_at.clone(),
             log: log.clone(),
         };
         let router = build_router(state.clone());
@@ -143,6 +150,7 @@ impl Application {
             update_requested,
             update_status,
             update_available,
+            restart_requested,
             embed_status,
             log,
             state,
@@ -167,6 +175,10 @@ impl Application {
 
     pub fn update_status(&self) -> Arc<tokio::sync::Mutex<String>> {
         self.update_status.clone()
+    }
+
+    pub fn restart_requested(&self) -> Arc<tokio::sync::Notify> {
+        self.restart_requested.clone()
     }
 
     pub fn embed_status(&self) -> Arc<tokio::sync::Mutex<String>> {
@@ -236,6 +248,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/update/check", post(handlers::update_check))
         .route("/api/update/status", get(handlers::update_status))
         .route("/api/update/available", get(handlers::update_available))
+        .route("/api/update/restart", post(handlers::update_restart))
         .route("/api/embed/status", get(handlers::embed_status))
         .route("/mcp", post(handlers::mcp_http))
         .layer(cors)

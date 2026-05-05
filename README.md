@@ -144,7 +144,7 @@ Set `provider = "none"` to disable the LLM and semantic search entirely. This al
 
 > **Gatekeeper note:** memoir is not signed with an Apple Developer certificate. macOS will show a warning the first time. Right-click → Open bypasses this. Alternatively: `xattr -dr com.apple.quarantine /Applications/Memoir.app`
 
-Once installed, Memoir can update itself — use **Check for Updates…** in the menu bar icon menu.
+Once installed, Memoir checks for updates automatically at startup and downloads them in the background. When a download is ready, the menu bar icon menu shows **Restart to Apply Update** — click it to install and relaunch. You can also trigger a manual check with **Check for Updates…** in the same menu.
 
 ### Build from source
 

@@ -929,6 +929,43 @@ impl IndexStore {
         Ok((entries, prior_counts))
     }
 
+    /// Fetch full SearchResult rows for a set of URLs (no snippet; rank = 0).
+    /// Used to enrich vector-only hits that FTS5 didn't return.
+    pub fn fetch_by_urls(&self, urls: &[String]) -> Result<Vec<SearchResult>> {
+        if urls.is_empty() {
+            return Ok(vec![]);
+        }
+        let conn = Connection::open(&self.path)?;
+        let placeholders = urls
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT url, COALESCE(NULLIF(title,''), url), first_visit_at, last_visit_at, starred
+             FROM pages WHERE url IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::ToSql> =
+            urls.iter().map(|u| u as &dyn rusqlite::ToSql).collect();
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok(SearchResult {
+                    url: row.get(0)?,
+                    title: row.get(1)?,
+                    snippet: String::new(),
+                    rank: 0.0,
+                    first_visit_at: row.get(2)?,
+                    last_visit_at: row.get(3)?,
+                    starred: row.get::<_, i32>(4)? != 0,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
     pub fn vector_search(
         &self,
         query: &[f32],

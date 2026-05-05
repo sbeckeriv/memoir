@@ -244,19 +244,78 @@ pub async fn search(
     let log = state.log.clone();
     let query = params.q.clone();
     let limit = params.limit;
-    tokio::task::spawn_blocking(move || {
-        let results = index
-            .search(&query, limit)
+
+    let use_vector = state.config.read().unwrap().embed.vector_search;
+    let embedder = if use_vector {
+        state.embedder.clone()
+    } else {
+        None
+    };
+
+    let results = if let Some(emb) = embedder {
+        let q_embed = query.clone();
+        let query_vec = tokio::task::spawn_blocking(move || emb.embed_one(&q_embed))
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        log.push(
-            LogKind::Search,
-            &query,
-            Some(format!("{} result(s)", results.len())),
-        );
-        Ok(Json(results))
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+
+        let index2 = index.clone();
+        let q2 = query.clone();
+        tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<SearchResult>> {
+            let vec_hits = index2.vector_search(&query_vec, limit, 0.3)?;
+            let bm25_hits = index2.search(&q2, limit)?;
+
+            // Build a URL→result lookup from BM25 without losing the ranked order.
+            let bm25_by_url: std::collections::HashMap<&str, &SearchResult> =
+                bm25_hits.iter().map(|r| (r.url.as_str(), r)).collect();
+
+            // Vector results lead; prefer BM25 data when available (has snippet + metadata).
+            let mut results: Vec<SearchResult> = Vec::new();
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut vec_only_urls: Vec<String> = vec![];
+            for vr in &vec_hits {
+                if seen.insert(vr.url.clone()) {
+                    if let Some(sr) = bm25_by_url.get(vr.url.as_str()) {
+                        results.push((*sr).clone());
+                    } else {
+                        vec_only_urls.push(vr.url.clone());
+                    }
+                }
+            }
+            // Enrich vector-only hits from the pages table.
+            for sr in index2.fetch_by_urls(&vec_only_urls)? {
+                if seen.insert(sr.url.clone()) {
+                    results.push(sr);
+                }
+            }
+            // Append BM25-only results in their original ranked order.
+            for sr in bm25_hits {
+                if seen.insert(sr.url.clone()) {
+                    results.push(sr);
+                }
+            }
+            results.truncate(limit as usize);
+            Ok(results)
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        tokio::task::spawn_blocking(move || {
+            index
+                .search(&query, limit)
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??
+    };
+
+    log.push(
+        LogKind::Search,
+        &params.q,
+        Some(format!("{} result(s)", results.len())),
+    );
+    Ok(Json(results))
 }
 
 pub async fn stats(State(state): State<AppState>) -> Result<Json<Stats>, StatusCode> {
@@ -692,9 +751,16 @@ pub async fn trigger_sync(State(state): State<AppState>) -> StatusCode {
     let config = state.config.read().unwrap().clone();
     let embedder = state.embedder.clone();
     let log = state.log.clone();
+    let last_sync_at = state.last_sync_at.clone();
     tokio::spawn(async move {
         if let Err(e) = crate::sync::run(&config, embedder, Some(log)).await {
             tracing::warn!(error = %e, "background sync failed");
+        } else {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            last_sync_at.store(ts, Ordering::Relaxed);
         }
     });
     StatusCode::ACCEPTED
@@ -704,12 +770,15 @@ pub async fn trigger_sync(State(state): State<AppState>) -> StatusCode {
 pub struct SyncStatus {
     pub paused: bool,
     pub interval_mins: u64,
+    pub last_sync_at: Option<i64>,
 }
 
 pub async fn sync_status(State(state): State<AppState>) -> Json<SyncStatus> {
+    let ts = state.last_sync_at.load(Ordering::Relaxed);
     Json(SyncStatus {
         paused: state.sync_paused.load(Ordering::Relaxed),
         interval_mins: state.config.read().unwrap().sync.interval_mins,
+        last_sync_at: if ts > 0 { Some(ts) } else { None },
     })
 }
 
@@ -1177,6 +1246,11 @@ pub async fn version() -> Json<serde_json::Value> {
 pub async fn update_check(State(state): State<AppState>) -> StatusCode {
     *state.update_status.lock().await = "checking".to_string();
     state.update_requested.notify_one();
+    StatusCode::ACCEPTED
+}
+
+pub async fn update_restart(State(state): State<AppState>) -> StatusCode {
+    state.restart_requested.notify_one();
     StatusCode::ACCEPTED
 }
 
