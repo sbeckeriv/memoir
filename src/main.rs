@@ -9,7 +9,8 @@ async fn load_embedder(config: &Settings) -> Option<Arc<dyn EmbedText>> {
         return None;
     }
     let cache = Settings::config_dir().join("models");
-    match tokio::task::spawn_blocking(move || Embedder::try_new(cache)).await {
+    let model = config.embed.model;
+    match tokio::task::spawn_blocking(move || Embedder::try_new(cache, model)).await {
         Ok(Ok(e)) => Some(Arc::new(e) as Arc<dyn EmbedText>),
         Ok(Err(err)) => {
             tracing::warn!(error = %err, "embedding model unavailable");

@@ -153,7 +153,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       </div>
       <div class="field">
         <label for="port">Port</label>
-        <input id="port" type="number" min="1" max="65535" placeholder="3000">
+        <input id="port" type="number" min="1" max="65535" placeholder="8734">
       </div>
     </div>
     <div class="field" style="max-width:200px">
@@ -278,7 +278,24 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       </div>
     </div>
     <div class="field">
-      <label><input type="checkbox" id="embed-enabled"> Enable semantic search <span class="hint">downloads ~130 MB embedding model on first use</span></label>
+      <label><input type="checkbox" id="embed-enabled"> Enable semantic search <span id="embed-size-hint" class="hint">downloads ~130 MB embedding model on first use</span></label>
+    </div>
+    <div class="field" id="embed-model-field">
+      <label for="embed-model">Embedding model</label>
+      <select id="embed-model" onchange="updateEmbedHint()">
+        <optgroup label="English">
+          <option value="bge_small_en_v1_5">BGE Small EN v1.5 — 384-dim · ~130 MB · default</option>
+          <option value="bge_base_en_v1_5">BGE Base EN v1.5 — 768-dim · ~430 MB · higher accuracy</option>
+          <option value="nomic_embed_text_v1_5">Nomic Embed Text v1.5 — 768-dim · ~270 MB · strong accuracy</option>
+          <option value="all_mini_lm_l6_v2">all-MiniLM-L6-v2 — 384-dim · ~90 MB · fastest/smallest</option>
+        </optgroup>
+        <optgroup label="Multilingual (non-English or mixed)">
+          <option value="multilingual_e5_small">Multilingual E5 Small — 384-dim · ~120 MB · 100+ languages</option>
+          <option value="multilingual_e5_base">Multilingual E5 Base — 768-dim · ~280 MB · 100+ languages · better accuracy</option>
+          <option value="paraphrase_multilingual_mini_lm_l12_v2">Paraphrase Multilingual MiniLM-L12 — 384-dim · ~120 MB · 50+ languages</option>
+        </optgroup>
+      </select>
+      <span class="hint" style="margin-top:2px">Changing model requires re-embedding: Manage → Reindex All after saving</span>
     </div>
   </div>
 
@@ -359,6 +376,8 @@ async function load() {
   document.getElementById('fetch-batch').value = s.sync?.fetch_batch ?? '';
   document.getElementById('embed-batch').value = s.sync?.embed_batch ?? '';
   document.getElementById('embed-enabled').checked = s.embed?.enabled ?? true;
+  document.getElementById('embed-model').value = s.embed?.model ?? 'bge_small_en_v1_5';
+  updateEmbedHint();
 }
 
 async function save() {
@@ -374,7 +393,7 @@ async function save() {
   const settings = {
     application: {
       host: document.getElementById('host').value.trim(),
-      port: parseInt(document.getElementById('port').value, 10) || 3000,
+      port: parseInt(document.getElementById('port').value, 10) || 8734,
       ui_poll_secs: parseInt(document.getElementById('ui-poll-secs').value, 10) || 30,
       custom_css: document.getElementById('custom-css').value,
       hotkey: document.getElementById('hotkey').value.trim(),
@@ -409,6 +428,7 @@ async function save() {
     },
     embed: {
       enabled: document.getElementById('embed-enabled').checked,
+      model: document.getElementById('embed-model').value,
     },
   };
 
@@ -472,6 +492,23 @@ function updateBrowserHint() {
 }
 
 document.getElementById('browser-kind').addEventListener('change', updateBrowserHint);
+
+const EMBED_MODEL_SIZES = {
+  bge_small_en_v1_5: '~130 MB',
+  bge_base_en_v1_5: '~430 MB',
+  nomic_embed_text_v1_5: '~270 MB',
+  all_mini_lm_l6_v2: '~90 MB',
+  multilingual_e5_small: '~120 MB',
+  multilingual_e5_base: '~280 MB',
+  paraphrase_multilingual_mini_lm_l12_v2: '~120 MB',
+};
+
+function updateEmbedHint() {
+  const model = document.getElementById('embed-model').value;
+  const size = EMBED_MODEL_SIZES[model] ?? '';
+  document.getElementById('embed-size-hint').textContent =
+    size ? `downloads ${size} embedding model on first use` : '';
+}
 
 async function exportBackup() {
   const r = await fetch('/api/export/all');

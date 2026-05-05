@@ -3,6 +3,8 @@ use std::sync::Mutex;
 
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
+use crate::config::EmbedModel;
+
 /// Trait so tests can inject a cheap fake embedder without downloading the model.
 pub trait EmbedText: Send + Sync + 'static {
     fn embed_one(&self, text: &str) -> anyhow::Result<Vec<f32>>;
@@ -13,9 +15,20 @@ pub struct Embedder {
 }
 
 impl Embedder {
-    pub fn try_new(cache_dir: PathBuf) -> anyhow::Result<Self> {
+    pub fn try_new(cache_dir: PathBuf, model: EmbedModel) -> anyhow::Result<Self> {
+        let fastembed_model = match model {
+            EmbedModel::BgeSmallEnV15 => EmbeddingModel::BGESmallENV15,
+            EmbedModel::BgeBaseEnV15 => EmbeddingModel::BGEBaseENV15,
+            EmbedModel::NomicEmbedTextV15 => EmbeddingModel::NomicEmbedTextV15,
+            EmbedModel::AllMiniLmL6V2 => EmbeddingModel::AllMiniLML6V2,
+            EmbedModel::MultilingualE5Small => EmbeddingModel::MultilingualE5Small,
+            EmbedModel::MultilingualE5Base => EmbeddingModel::MultilingualE5Base,
+            EmbedModel::ParaphraseMultilingualMiniLmL12V2 => {
+                EmbeddingModel::ParaphraseMLMiniLML12V2
+            }
+        };
         let model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::BGESmallENV15)
+            InitOptions::new(fastembed_model)
                 .with_show_download_progress(true)
                 .with_cache_dir(cache_dir),
         )?;
@@ -45,7 +58,8 @@ mod tests {
     #[test]
     #[ignore]
     fn embedder_produces_384_dim_vector() {
-        let embedder = Embedder::try_new(std::env::temp_dir()).expect("model load failed");
+        let embedder = Embedder::try_new(std::env::temp_dir(), EmbedModel::BgeSmallEnV15)
+            .expect("model load failed");
         let vec = embedder.embed_one("hello world").unwrap();
         assert_eq!(vec.len(), 384);
         let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();

@@ -58,15 +58,39 @@ fn serialize_path<S: serde::Serializer>(path: &Path, s: S) -> Result<S::Ok, S::E
     s.serialize_str(&path.to_string_lossy())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum EmbedModel {
+    /// English — 384-dim, ~130 MB (default)
+    #[default]
+    BgeSmallEnV15,
+    /// English — 768-dim, ~430 MB, higher accuracy
+    BgeBaseEnV15,
+    /// English — 768-dim, ~270 MB, strong accuracy
+    NomicEmbedTextV15,
+    /// English — 384-dim, ~90 MB, fastest/smallest
+    AllMiniLmL6V2,
+    /// Multilingual (100+ languages) — 384-dim, ~120 MB
+    MultilingualE5Small,
+    /// Multilingual (100+ languages) — 768-dim, ~280 MB, better accuracy
+    MultilingualE5Base,
+    /// Multilingual (50+ languages) — 384-dim, ~120 MB
+    ParaphraseMultilingualMiniLmL12V2,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EmbedSettings {
     pub enabled: bool,
+    pub model: EmbedModel,
 }
 
 impl Default for EmbedSettings {
     fn default() -> Self {
-        Self { enabled: true }
+        Self {
+            enabled: true,
+            model: EmbedModel::default(),
+        }
     }
 }
 
@@ -149,7 +173,7 @@ impl Default for ApplicationSettings {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 3000,
+            port: 8734,
             ui_poll_secs: 30,
             custom_css: String::new(),
             hotkey: "CmdOrCtrl+Shift+Space".to_string(),

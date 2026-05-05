@@ -527,13 +527,27 @@ function selectBrowser(el, path, kind) {
   el.classList.add('selected');
   selectedBrowserPath = path;
   selectedBrowserKind = kind || '';
+  document.getElementById('custom-path').value = path;
   document.getElementById('step1-next').disabled = false;
+}
+
+function inferKindFromPath(p) {
+  if (/BraveSoftware/i.test(p))   return 'brave';
+  if (/Google\/Chrome/i.test(p))  return 'chrome';
+  if (/Microsoft Edge/i.test(p))  return 'edge';
+  if (/Arc\/User/i.test(p))       return 'arc';
+  if (/Chromium/i.test(p))        return 'chromium';
+  if (/Firefox|places\.sqlite/i.test(p)) return 'firefox';
+  if (/Safari\/History/i.test(p)) return 'safari';
+  if (/Orion/i.test(p))           return 'orion';
+  return '';
 }
 
 document.getElementById('custom-path').addEventListener('input', function() {
   if (this.value.trim()) {
     document.querySelectorAll('.browser-option').forEach(e => e.classList.remove('selected'));
     selectedBrowserPath = this.value.trim();
+    selectedBrowserKind = inferKindFromPath(selectedBrowserPath);
     document.getElementById('step1-next').disabled = false;
   }
 });

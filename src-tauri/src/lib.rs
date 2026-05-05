@@ -213,8 +213,9 @@ pub fn run() {
                                     None,
                                 );
                                 let cache = memoir::Settings::config_dir().join("models");
+                                let model = config.embed.model;
                                 match tokio::task::spawn_blocking(move || {
-                                    memoir::Embedder::try_new(cache)
+                                    memoir::Embedder::try_new(cache, model)
                                 })
                                 .await
                                 {
@@ -267,7 +268,7 @@ pub fn run() {
                     }
                     Err(e) => {
                         tracing::error!(error = %e, "failed to start memoir server");
-                        port_tx.send(3000).ok();
+                        port_tx.send(8734).ok();
                     }
                 }
             });
@@ -275,7 +276,7 @@ pub fn run() {
             // Wait up to 15 s for the server to bind.
             let port = port_rx
                 .recv_timeout(std::time::Duration::from_secs(15))
-                .unwrap_or(3000);
+                .unwrap_or(8734);
             let log = log_rx
                 .recv_timeout(std::time::Duration::from_secs(1))
                 .unwrap_or_else(|_| Arc::new(memoir::SessionLog::new()));
@@ -333,8 +334,11 @@ pub fn run() {
 
                     let embedder = if config.embed.enabled {
                         let cache = memoir::Settings::config_dir().join("models");
-                        match tokio::task::spawn_blocking(move || memoir::Embedder::try_new(cache))
-                            .await
+                        let model = config.embed.model;
+                        match tokio::task::spawn_blocking(move || {
+                            memoir::Embedder::try_new(cache, model)
+                        })
+                        .await
                         {
                             Ok(Ok(e)) => Some(Arc::new(e) as Arc<dyn memoir::EmbedText>),
                             Ok(Err(err)) => {
@@ -454,7 +458,8 @@ fn build_tray(
                     let config = memoir::Settings::load();
                     let embedder = if config.embed.enabled {
                         let cache = memoir::Settings::config_dir().join("models");
-                        match tokio::task::spawn_blocking(move || memoir::Embedder::try_new(cache)).await {
+                        let model = config.embed.model;
+                        match tokio::task::spawn_blocking(move || memoir::Embedder::try_new(cache, model)).await {
                             Ok(Ok(e)) => Some(Arc::new(e) as Arc<dyn memoir::EmbedText>),
                             Ok(Err(err)) => {
                                 tracing::warn!(error = %err, "embedding model unavailable");

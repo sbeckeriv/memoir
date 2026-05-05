@@ -889,7 +889,7 @@ pub async fn setup_save(Json(payload): Json<SetupPayload>) -> Result<StatusCode,
     }
 
     let browser_kind = if payload.browser_kind.is_empty() {
-        "orion".to_string()
+        "chromium".to_string()
     } else {
         payload.browser_kind.clone()
     };
