@@ -546,6 +546,9 @@ main {
         <button class="clear-btn" id="ask-clear" tabindex="-1">✕</button>
       </div>
       <button class="btn btn-ask" id="btn-ask">Ask</button>
+      <label id="think-label" style="display:flex;align-items:center;gap:0.3rem;font-size:0.8rem;color:var(--text-muted,#888);white-space:nowrap;cursor:pointer">
+        <input type="checkbox" id="no-think-chk"> no think
+      </label>
     </div>
     <div id="ask-hint" style="display:none;font-size:0.8rem;color:var(--text-muted,#888);margin-bottom:0.5rem"></div>
     <div class="spinner" id="ask-spinner"></div>
@@ -731,14 +734,17 @@ function renderSearchItems(items) {
   }).join(''));
 }
 
-function renderAskResult(data) {
+function renderAskResult(data, elapsedMs) {
   const sourcesHtml = (data.sources || []).length
     ? `<div class="card-title" style="margin-top:0.875rem">Sources</div>
        <div class="source-list">${data.sources.map(u =>
          `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`
        ).join('')}</div>`
     : '';
-  setAskBody(`<div class="answer-text">${data.answer}</div>${sourcesHtml}`);
+  const timingHtml = elapsedMs != null
+    ? `<div style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-muted,#888)">took ${(elapsedMs / 1000).toFixed(1)}s</div>`
+    : '';
+  setAskBody(`<div class="answer-text">${data.answer}</div>${sourcesHtml}${timingHtml}`);
 }
 
 function visibleSources() {
@@ -749,16 +755,19 @@ function visibleSources() {
 }
 
 async function askWithSources(q, sources) {
+  const noThink = document.getElementById('no-think-chk').checked;
+  const payload = noThink ? q + ' /no_think' : q;
   showAskSpinner();
+  const t0 = Date.now();
   try {
     const r = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q, sources }),
+      body: JSON.stringify({ q: payload, sources }),
     });
     const data = await r.json();
     hideAskSpinner();
-    renderAskResult(data);
+    renderAskResult(data, Date.now() - t0);
   } catch {
     hideAskSpinner();
     setAskBody('<span class="empty">Ask failed.</span>');

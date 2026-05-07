@@ -2,7 +2,31 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use clap::{Parser, Subcommand};
 use memoir::{Application, EmbedText, Embedder, Settings, config::LlmProvider};
+
+#[derive(Parser)]
+#[command(name = "memoir")]
+#[command(about = "Personal browser history indexer", long_about = None)]
+#[command(version)]
+struct Cli {
+    /// Path to config directory
+    #[arg(long, value_name = "DIR")]
+    config_dir: Option<PathBuf>,
+
+    /// Disable background sync
+    #[arg(long)]
+    no_sync: bool,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run a one-shot sync without starting the server
+    Sync,
+}
 
 async fn load_embedder(config: &Settings) -> Option<Arc<dyn EmbedText>> {
     if !config.embed.enabled || config.llm.provider == LlmProvider::Disabled {
@@ -33,19 +57,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .with_writer(std::io::stderr)
         .init();
 
-    let raw: Vec<String> = std::env::args().skip(1).collect();
-    let (config_dir, subcommand, no_sync) = parse_args(&raw);
+    let cli = Cli::parse();
 
-    let config = match config_dir {
+    let config = match cli.config_dir {
         Some(dir) => Settings::load_from(&dir),
         None => Settings::load(),
     };
 
     let embedder = load_embedder(&config).await;
 
-    match subcommand {
-        Some("sync") => memoir::sync::run(&config, embedder, None).await?,
-        _ => {
+    match cli.command {
+        Some(Commands::Sync) => memoir::sync::run(&config, embedder, None).await?,
+        None => {
             let sync_paused = Arc::new(AtomicBool::new(false));
             let app =
                 Application::build(config.clone(), embedder.clone(), sync_paused.clone()).await?;
@@ -64,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 });
             }
 
-            if !no_sync {
+            if !cli.no_sync {
                 let cfg = config.clone();
                 let emb = embedder.clone();
                 let log = app.log.clone();
@@ -111,36 +134,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     Ok(())
-}
-
-fn parse_args(args: &[String]) -> (Option<PathBuf>, Option<&str>, bool) {
-    let mut config_dir: Option<PathBuf> = None;
-    let mut subcommand: Option<&str> = None;
-    let mut no_sync = false;
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--config-dir" => {
-                if let Some(val) = args.get(i + 1) {
-                    config_dir = Some(PathBuf::from(val));
-                    i += 2;
-                } else {
-                    eprintln!("memoir: --config-dir requires a path");
-                    i += 1;
-                }
-            }
-            "--no-sync" => {
-                no_sync = true;
-                i += 1;
-            }
-            s if subcommand.is_none() => {
-                subcommand = Some(s);
-                i += 1;
-            }
-            _ => {
-                i += 1;
-            }
-        }
-    }
-    (config_dir, subcommand, no_sync)
 }

@@ -275,8 +275,8 @@ async fn handle_tools_call(state: &AppState, params: &Value) -> Result<Value, St
             let prompt =
                 format!("<information>\n{sources_xml}\n</information>\n\nQuestion: {query}");
 
-            let answer = state
-                .llm
+            let llm = state.llm.lock().unwrap().clone();
+            let answer = llm
                 .generate(&prompt, Some(&system_prompt))
                 .await
                 .map_err(|e| e.to_string())?;

@@ -19,3 +19,4 @@ pub use index::{FetchStatus, IndexStore, PageEntry, SearchResult, Stats, VectorR
 pub use rag::{AskResponse, LlmClient};
 pub use server::{Application, UpdateInfo, check_latest_release};
 pub use session_log::{LogKind, SessionLog};
+pub use sync::SyncError;

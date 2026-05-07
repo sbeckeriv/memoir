@@ -1,13 +1,38 @@
 use std::sync::Arc;
 
+use thiserror::Error;
 use tracing::{debug, info, warn};
 
 use crate::browser;
 use crate::config::{self, Settings};
 use crate::embed::EmbedText;
 use crate::fetch::{FetchResult, Fetcher};
+use crate::index::store::IndexError;
 use crate::index::{FetchStatus, IndexStore};
 use crate::session_log::{LogKind, SessionLog};
+
+const BROWSER_HISTORY_FETCH_LIMIT: u32 = 1000;
+
+#[derive(Debug, Error)]
+pub enum SyncError {
+    #[error("browser history unavailable: {0}")]
+    BrowserAccess(#[from] std::io::Error),
+
+    #[error("index operation failed: {0}")]
+    Index(#[from] IndexError),
+
+    #[error("fetch failed: {0}")]
+    Fetch(String),
+
+    #[error("embedding failed: {0}")]
+    Embedding(String),
+
+    #[error("task join error: {0}")]
+    TaskJoin(#[from] tokio::task::JoinError),
+
+    #[error("operation failed: {0}")]
+    Other(#[from] anyhow::Error),
+}
 
 fn slog(
     log: &Option<Arc<SessionLog>>,
@@ -24,7 +49,7 @@ pub async fn run(
     config: &Settings,
     embedder: Option<Arc<dyn EmbedText>>,
     log: Option<Arc<SessionLog>>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), SyncError> {
     info!(
         data_dir   = %config.data.dir.display(),
         history_db = %config.browser.history_db_path.display(),
@@ -75,7 +100,7 @@ pub async fn run(
             let snap_path = snapshot.path().to_path_buf();
             tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<String>> {
                 let conn = rusqlite::Connection::open(&snap_path)?;
-                let items = b.recent(&conn, 1000)?;
+                let items = b.recent(&conn, BROWSER_HISTORY_FETCH_LIMIT)?;
                 debug!("browser history has {} items", items.len());
                 let visits: Vec<(String, String)> = items
                     .iter()

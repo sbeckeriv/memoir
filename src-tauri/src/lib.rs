@@ -86,6 +86,8 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 window.hide().ok();
                 api.prevent_close();
+                #[cfg(target_os = "macos")]
+                let _ = window.app_handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
         })
         .setup(move |app| {
@@ -490,6 +492,8 @@ pub fn run() {
 /// If `focus_search` is true, eval JS to focus the search input; if the user
 /// is on a page without a search box, navigate home first.
 fn show_main_window(app: &tauri::AppHandle, port: u16, focus_search: bool) {
+    #[cfg(target_os = "macos")]
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.set_focus();

@@ -1,6 +1,5 @@
 mod handlers;
 
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicI64};
 use std::sync::{Arc, RwLock};
 
@@ -12,7 +11,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::browser::BrowserHistory;
 use crate::config::Settings;
 use crate::embed::EmbedText;
 use crate::index::IndexStore;
@@ -65,20 +63,27 @@ pub async fn check_latest_release(current_ver: &str) -> Option<UpdateInfo> {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub browser_db_path: PathBuf,
-    pub browser: Arc<dyn BrowserHistory>,
+    // Core components
     pub index: IndexStore,
     pub embedder: Option<Arc<dyn EmbedText>>,
-    pub llm: Arc<LlmClient>,
+    pub llm: Arc<std::sync::Mutex<Arc<LlmClient>>>,
     pub config: Arc<RwLock<Settings>>,
+
+    // Sync state
     pub sync_paused: Arc<AtomicBool>,
+    pub last_sync_at: Arc<AtomicI64>,
+
+    // UI state
     pub palette_hide: Arc<tokio::sync::Notify>,
+    pub restart_requested: Arc<tokio::sync::Notify>,
+
+    // Update state
     pub update_requested: Arc<tokio::sync::Notify>,
     pub update_status: Arc<tokio::sync::Mutex<String>>,
     pub update_available: Arc<tokio::sync::Mutex<Option<UpdateInfo>>>,
-    pub restart_requested: Arc<tokio::sync::Notify>,
+
+    // Other
     pub embed_status: Arc<tokio::sync::Mutex<String>>,
-    pub last_sync_at: Arc<AtomicI64>,
     pub log: Arc<crate::session_log::SessionLog>,
 }
 
@@ -105,9 +110,9 @@ impl Application {
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let index_path = config.data.dir.join("index.db");
         let index = IndexStore::open(&index_path)?;
-        let llm = Arc::new(LlmClient::new(&config.llm));
-        llm.ensure_loaded().await;
-        let browser = crate::browser::for_config(&config.browser);
+        let llm_client = Arc::new(LlmClient::new(&config.llm));
+        llm_client.ensure_loaded().await;
+        let llm = Arc::new(std::sync::Mutex::new(llm_client));
         let palette_hide = Arc::new(tokio::sync::Notify::new());
         let update_requested = Arc::new(tokio::sync::Notify::new());
         let update_status = Arc::new(tokio::sync::Mutex::new(String::new()));
@@ -121,20 +126,18 @@ impl Application {
         let log = Arc::new(crate::session_log::SessionLog::new());
         let last_sync_at = Arc::new(AtomicI64::new(0));
         let state = AppState {
-            browser_db_path: config.browser.history_db_path.clone(),
-            browser,
             index,
             embedder,
             llm,
             config: Arc::new(RwLock::new(config.clone())),
             sync_paused: sync_paused.clone(),
+            last_sync_at: last_sync_at.clone(),
             palette_hide: palette_hide.clone(),
+            restart_requested: restart_requested.clone(),
             update_requested: update_requested.clone(),
             update_status: update_status.clone(),
             update_available: update_available.clone(),
-            restart_requested: restart_requested.clone(),
             embed_status: embed_status.clone(),
-            last_sync_at: last_sync_at.clone(),
             log: log.clone(),
         };
         let router = build_router(state.clone());

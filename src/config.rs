@@ -63,10 +63,13 @@ fn serialize_path<S: serde::Serializer>(path: &Path, s: S) -> Result<S::Ok, S::E
 pub enum EmbedModel {
     /// English — 384-dim, ~130 MB (default)
     #[default]
+    #[serde(rename = "bge_small_en_v1_5")]
     BgeSmallEnV15,
     /// English — 768-dim, ~430 MB, higher accuracy
+    #[serde(rename = "bge_base_en_v1_5")]
     BgeBaseEnV15,
     /// English — 768-dim, ~270 MB, strong accuracy
+    #[serde(rename = "nomic_embed_text_v1_5")]
     NomicEmbedTextV15,
     /// English — 384-dim, ~90 MB, fastest/smallest
     AllMiniLmL6V2,
@@ -315,6 +318,33 @@ impl Settings {
             .unwrap_or_else(|| home_dir().join(".memoir"))
     }
 
+    /// Validate settings and return errors for any invalid configuration.
+    pub fn validate(&self) -> Result<(), Vec<String>> {
+        let mut errors = Vec::new();
+
+        if self.sync.interval_mins == 0 {
+            errors.push("sync interval cannot be zero".to_string());
+        }
+
+        if self.fetch.timeout_secs == 0 {
+            errors.push("fetch timeout cannot be zero".to_string());
+        }
+
+        if self.fetch.max_retries == 0 {
+            errors.push("fetch max_retries cannot be zero".to_string());
+        }
+
+        if self.application.port == 0 {
+            errors.push("application port cannot be zero".to_string());
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     pub fn load() -> Self {
         Self::load_from(&Self::config_dir())
     }
@@ -331,13 +361,21 @@ impl Settings {
                 return Self::default();
             }
         };
-        match toml::from_str(&text) {
+        let settings: Self = match toml::from_str(&text) {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("memoir: invalid config ({path:?}): {e}");
-                Self::default()
+                return Self::default();
+            }
+        };
+
+        if let Err(errors) = settings.validate() {
+            for err in errors {
+                eprintln!("memoir config warning: {}", err);
             }
         }
+
+        settings
     }
 }
 
@@ -371,6 +409,8 @@ mod tests {
             ..Default::default()
         }
     }
+
+    // --- Ban pattern tests ---
 
     #[test]
     fn exact_domain_is_banned() {
@@ -467,5 +507,92 @@ mod tests {
         let f = banned(&["github.com/mycompany"]);
         assert!(!f.is_banned("https://github.com/"));
         assert!(!f.is_banned("https://github.com/torvalds/linux"));
+    }
+
+    // --- host_from_url tests ---
+
+    #[test]
+    fn host_from_url_https() {
+        assert_eq!(host_from_url("https://example.com/path"), "example.com");
+    }
+
+    #[test]
+    fn host_from_url_http() {
+        assert_eq!(host_from_url("http://example.com/path"), "example.com");
+    }
+
+    #[test]
+    fn host_from_url_with_port() {
+        assert_eq!(host_from_url("http://example.com:8080/path"), "example.com");
+    }
+
+    #[test]
+    fn host_from_url_subdomain() {
+        assert_eq!(
+            host_from_url("https://sub.example.com/path"),
+            "sub.example.com"
+        );
+    }
+
+    #[test]
+    fn host_from_url_query_string() {
+        assert_eq!(host_from_url("https://example.com?q=test"), "example.com");
+    }
+
+    #[test]
+    fn host_from_url_fragment() {
+        assert_eq!(host_from_url("https://example.com#section"), "example.com");
+    }
+
+    // --- Settings validation tests ---
+
+    #[test]
+    fn valid_settings_pass_validation() {
+        let settings = Settings::default();
+        assert!(settings.validate().is_ok());
+    }
+
+    #[test]
+    fn zero_sync_interval_fails_validation() {
+        let mut settings = Settings::default();
+        settings.sync.interval_mins = 0;
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn zero_fetch_timeout_fails_validation() {
+        let mut settings = Settings::default();
+        settings.fetch.timeout_secs = 0;
+        let result = settings.validate();
+        assert!(result.is_err());
+        if let Err(errors) = result {
+            assert!(errors.iter().any(|e| e.contains("fetch timeout")));
+        }
+    }
+
+    #[test]
+    fn zero_max_retries_fails_validation() {
+        let mut settings = Settings::default();
+        settings.fetch.max_retries = 0;
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn zero_port_fails_validation() {
+        let mut settings = Settings::default();
+        settings.application.port = 0;
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn multiple_validation_errors_returned() {
+        let mut settings = Settings::default();
+        settings.sync.interval_mins = 0;
+        settings.fetch.timeout_secs = 0;
+        let result = settings.validate();
+        assert!(result.is_err());
+        if let Err(errors) = result {
+            assert!(errors.len() >= 2);
+        }
     }
 }
