@@ -246,7 +246,7 @@ async function searchAndMaybeAsk(q, ask) {
       const r = await fetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q, sources }),
+        body: JSON.stringify({ q: q + ' /no_think', sources }),
       });
       if (!r.ok) throw new Error();
       const data = await r.json();
