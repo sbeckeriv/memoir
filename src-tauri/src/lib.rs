@@ -150,6 +150,11 @@ pub fn run() {
                                         );
                                         *update_status_auto.lock().await =
                                             "downloading".to_string();
+                                        if let Ok(guard) = restart_item_auto.lock() {
+                                            if let Some(item) = guard.as_ref() {
+                                                let _ = item.set_text("Updating…");
+                                            }
+                                        }
                                         match update.download(|_, _| {}, || {}).await {
                                             Ok(bytes) => {
                                                 *pending_auto.lock().await =
@@ -164,9 +169,7 @@ pub fn run() {
                                                 if let Ok(guard) = restart_item_auto.lock() {
                                                     if let Some(item) = guard.as_ref() {
                                                         let _ = item.set_enabled(true);
-                                                        let _ = item.set_text(format!(
-                                                            "Restart to Apply (v{ver})"
-                                                        ));
+                                                        let _ = item.set_text("Restart to Update");
                                                     }
                                                 }
                                             }
@@ -224,6 +227,11 @@ pub fn run() {
                                             );
                                             *update_status.lock().await =
                                                 "downloading".to_string();
+                                            if let Ok(guard) = restart_item_check.lock() {
+                                                if let Some(item) = guard.as_ref() {
+                                                    let _ = item.set_text("Updating…");
+                                                }
+                                            }
                                             match update.download(|_, _| {}, || {}).await {
                                                 Ok(bytes) => {
                                                     *pending_check.lock().await =
@@ -238,9 +246,7 @@ pub fn run() {
                                                     if let Ok(guard) = restart_item_check.lock() {
                                                         if let Some(item) = guard.as_ref() {
                                                             let _ = item.set_enabled(true);
-                                                            let _ = item.set_text(format!(
-                                                                "Restart to Apply (v{ver})"
-                                                            ));
+                                                            let _ = item.set_text("Restart to Update");
                                                         }
                                                     }
                                                 }
@@ -542,27 +548,13 @@ fn build_tray(
     let pause_idx = MenuItem::with_id(app, "pause_index", "Pause Indexing", true, None::<&str>)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let autolaunch = MenuItem::with_id(app, "autolaunch", autolaunch_label, true, None::<&str>)?;
-    let check_updates = MenuItem::with_id(
-        app,
-        "check_updates",
-        "Check for Updates…",
-        true,
-        None::<&str>,
-    )?;
-    // Disabled until an update has been downloaded.
-    let restart_update = MenuItem::with_id(
-        app,
-        "restart_update",
-        "Restart to Apply Update",
-        false,
-        None::<&str>,
-    )?;
+    let update_status = MenuItem::with_id(app, "update_status", "Up to Date", false, None::<&str>)?;
     let sep3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
-    // Store the restart item so background tasks can enable it when ready.
+    // Store the item so background tasks can update its text/state.
     if let Ok(mut guard) = restart_item_shared.lock() {
-        *guard = Some(restart_update.clone());
+        *guard = Some(update_status.clone());
     }
 
     let menu = Menu::with_items(
@@ -575,8 +567,7 @@ fn build_tray(
             &pause_idx,
             &sep2,
             &autolaunch,
-            &check_updates,
-            &restart_update,
+            &update_status,
             &sep3,
             &quit,
         ],
@@ -584,8 +575,7 @@ fn build_tray(
 
     let pause_item = pause_idx.clone();
     let autolaunch_item = autolaunch.clone();
-    let check_updates_item = check_updates.clone();
-    let restart_item_tray = restart_update.clone();
+    let update_status_item = update_status.clone();
     let pending_tray = pending_update.clone();
 
     TrayIconBuilder::new()
@@ -648,88 +638,9 @@ fn build_tray(
                 }
             }
 
-            "check_updates" => {
-                use tauri_plugin_updater::UpdaterExt;
+            "update_status" => {
                 let app = app.clone();
-                let item = check_updates_item.clone();
-                let restart_item = restart_item_tray.clone();
-                let log_upd = log.clone();
-                let pending = pending_tray.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = item.set_text("Checking…");
-                    log_upd.push(memoir::LogKind::Sync, "Update check started", None);
-                    match app.updater() {
-                        Ok(updater) => match updater.check().await {
-                            Ok(Some(update)) => {
-                                let ver = update.version.clone();
-                                tracing::info!(version = %ver, "update available, downloading");
-                                let _ = item.set_text("Downloading…");
-                                log_upd.push(
-                                    memoir::LogKind::Sync,
-                                    format!("Update available: v{ver}"),
-                                    None,
-                                );
-                                match update.download(|_, _| {}, || {}).await {
-                                    Ok(bytes) => {
-                                        *pending.lock().await = Some((update, bytes));
-                                        log_upd.push(
-                                            memoir::LogKind::Sync,
-                                            format!("Update v{ver} downloaded, restart to apply"),
-                                            None,
-                                        );
-                                        let _ = restart_item.set_enabled(true);
-                                        let _ = restart_item
-                                            .set_text(format!("Restart to Apply (v{ver})"));
-                                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                                        let _ = item.set_text("Check for Updates…");
-                                    }
-                                    Err(e) => {
-                                        tracing::warn!(error = %e, "update download failed");
-                                        log_upd.push(
-                                            memoir::LogKind::Error,
-                                            "Update download failed",
-                                            e.to_string(),
-                                        );
-                                        let _ = item.set_text("Download failed");
-                                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                                        let _ = item.set_text("Check for Updates…");
-                                    }
-                                }
-                            }
-                            Ok(None) => {
-                                tracing::info!("memoir is up to date");
-                                log_upd.push(memoir::LogKind::Sync, "Already up to date", None);
-                                let _ = item.set_text("✓ Up to date");
-                                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                                let _ = item.set_text("Check for Updates…");
-                            }
-                            Err(e) => {
-                                tracing::warn!(error = %e, "update check failed");
-                                log_upd.push(
-                                    memoir::LogKind::Error,
-                                    "Update check failed",
-                                    e.to_string(),
-                                );
-                                let _ = item.set_text("Check failed");
-                                tokio::time::sleep(std::time::Duration::from_secs(4)).await;
-                                let _ = item.set_text("Check for Updates…");
-                            }
-                        },
-                        Err(e) => {
-                            tracing::warn!(error = %e, "updater unavailable");
-                            log_upd.push(
-                                memoir::LogKind::Error,
-                                "Updater unavailable",
-                                e.to_string(),
-                            );
-                            let _ = item.set_text("Check for Updates…");
-                        }
-                    }
-                });
-            }
-
-            "restart_update" => {
-                let app = app.clone();
+                let item = update_status_item.clone();
                 let pending = pending_tray.clone();
                 tauri::async_runtime::spawn(async move {
                     let entry = pending.lock().await.take();
@@ -740,6 +651,8 @@ fn build_tray(
                             Ok(()) => app.restart(),
                             Err(e) => {
                                 tracing::warn!(error = %e, "update install failed");
+                                let _ = item.set_text("Up to Date");
+                                let _ = item.set_enabled(false);
                             }
                         }
                     }

@@ -276,6 +276,22 @@ pub async fn top_sites(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }
 
+pub async fn autocomplete(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<String>>, StatusCode> {
+    let q = params.q.trim().to_string();
+    if q.is_empty() {
+        return Ok(Json(vec![]));
+    }
+    let index = state.index.clone();
+    let results = tokio::task::spawn_blocking(move || index.autocomplete(&q, 8))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(results))
+}
+
 pub async fn search(
     State(state): State<AppState>,
     Query(params): Query<SearchParams>,
@@ -591,6 +607,20 @@ pub async fn starred(
     let limit = params.limit;
     let entries = with_index(state.index, move |idx| idx.get_starred(limit)).await?;
     Ok(Json(entries))
+}
+
+pub async fn page_body(
+    State(state): State<AppState>,
+    Query(params): Query<UrlParam>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let url = params.url.clone();
+    let bodies = with_index(state.index, move |idx| idx.get_bodies(&[url])).await?;
+    let body = bodies
+        .into_iter()
+        .next()
+        .map(|(_, b)| b)
+        .unwrap_or_default();
+    Ok(Json(serde_json::json!({ "body": body })))
 }
 
 pub async fn delete_page(

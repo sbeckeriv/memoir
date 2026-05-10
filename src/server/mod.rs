@@ -207,13 +207,17 @@ fn build_router(state: AppState) -> Router {
         .route("/api/weekly", get(handlers::weekly))
         .route("/api/top-sites", get(handlers::top_sites))
         .route("/api/search", get(handlers::search))
+        .route("/api/autocomplete", get(handlers::autocomplete))
         .route("/api/ask", get(handlers::ask_get).post(handlers::ask))
         .route("/api/stats", get(handlers::stats))
         .route("/api/favicon", get(handlers::favicon))
         .route("/api/pages", get(handlers::list_pages))
         .route("/api/starred", get(handlers::starred))
         .route("/api/star", post(handlers::set_starred))
-        .route("/api/page", delete(handlers::delete_page))
+        .route(
+            "/api/page",
+            get(handlers::page_body).delete(handlers::delete_page),
+        )
         .route("/api/host", delete(handlers::delete_host))
         .route("/api/ban", post(handlers::ban_host))
         .route("/api/bookmark", post(handlers::bookmark))

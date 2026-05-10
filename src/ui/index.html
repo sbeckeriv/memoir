@@ -95,6 +95,30 @@ header h1 a { display: block; }
   box-shadow: 0 0 0 3px rgba(91,138,244,0.15);
 }
 
+.ac-list {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0; right: 0;
+  background: #fff;
+  border: 1px solid #d0d0d8;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+  z-index: 100;
+  overflow: hidden;
+  display: none;
+}
+.ac-list.open { display: block; }
+.ac-item {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #333;
+}
+.ac-item:hover, .ac-item.ac-sel { background: #f0f4ff; color: #1a3a8f; }
+
 .clear-btn {
   position: absolute;
   right: 7px;
@@ -252,6 +276,23 @@ main {
 .icon-btn.starred { color: #f59e0b; }
 .icon-btn.del:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 .result-item.is-selected { background: rgba(91,138,244,0.08); border-radius: 4px; }
+.result-body-expand {
+  display: none;
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #f8f8fb;
+  border-radius: 5px;
+  border: 1px solid #e8e8ef;
+  font-size: 0.8rem;
+  color: #444;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.result-item.expanded .result-body-expand { display: block; }
+.icon-btn.expand.active { color: #2563eb; background: #eff4ff; border-color: #bfdbfe; }
 
 .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
 @media (max-width: 640px) { .home-grid { grid-template-columns: 1fr; } }
@@ -525,6 +566,7 @@ main {
     <div class="input-wrap">
       <input id="q" type="text" placeholder="search your history… (end with ? to also ask)" autocomplete="off">
       <button class="clear-btn" id="q-clear" tabindex="-1">✕</button>
+      <ul class="ac-list" id="ac-list"></ul>
     </div>
     <button class="btn btn-search" id="btn-search">Search</button>
   </div>
@@ -653,10 +695,84 @@ qInput.addEventListener('input', () => {
   const raw = qInput.value.trim();
   if (!raw) {
     document.getElementById('results-section').style.display = 'none';
+    acClose();
     return;
   }
+  acFetch(raw);
   _liveTimer = setTimeout(() => doSearch(true), 300);
 });
+
+const acList = document.getElementById('ac-list');
+let _acTimer = null;
+let _acSel = -1;
+let _acItems = [];
+
+function acClose() {
+  acList.classList.remove('open');
+  _acSel = -1;
+  _acItems = [];
+}
+
+function acRender(titles) {
+  acList.innerHTML = '';
+  _acItems = titles;
+  _acSel = -1;
+  if (!titles.length) { acClose(); return; }
+  titles.forEach((t, i) => {
+    const li = document.createElement('li');
+    li.className = 'ac-item';
+    li.textContent = t;
+    li.addEventListener('mousedown', e => {
+      e.preventDefault();
+      acSelect(i);
+    });
+    acList.appendChild(li);
+  });
+  acList.classList.add('open');
+}
+
+function acHighlight() {
+  acList.querySelectorAll('.ac-item').forEach((el, i) => el.classList.toggle('ac-sel', i === _acSel));
+}
+
+function acSelect(i) {
+  qInput.value = _acItems[i];
+  acClose();
+  clearTimeout(_liveTimer);
+  doSearch();
+}
+
+function acFetch(q) {
+  clearTimeout(_acTimer);
+  if (q.length < 2) { acClose(); return; }
+  _acTimer = setTimeout(async () => {
+    try {
+      const r = await fetch('/api/autocomplete?q=' + encodeURIComponent(q));
+      const titles = await r.json();
+      if (qInput.value.trim() === q) acRender(titles);
+    } catch {}
+  }, 120);
+}
+
+qInput.addEventListener('keydown', e => {
+  if (!acList.classList.contains('open')) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _acSel = Math.min(_acSel + 1, _acItems.length - 1);
+    acHighlight();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _acSel = Math.max(_acSel - 1, -1);
+    acHighlight();
+  } else if (e.key === 'Enter' && _acSel >= 0) {
+    e.stopImmediatePropagation();
+    acSelect(_acSel);
+  } else if (e.key === 'Escape') {
+    acClose();
+  }
+});
+
+qInput.addEventListener('blur', () => setTimeout(acClose, 150));
 
 function esc(s) {
   return String(s ?? '')
@@ -724,8 +840,10 @@ function renderSearchItems(items) {
         <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title || i.url)}</a>
         <div class="snippet">${i.snippet || ''}</div>
         ${datesHtml}
+        <div class="result-body-expand"></div>
       </div>
       <div class="result-actions">
+        <button class="icon-btn expand" title="View page content" onclick="toggleExpandBody(this)">▾</button>
         <a class="icon-btn" href="https://web.archive.org/web/*/${esc(i.url)}" target="_blank" rel="noopener" title="View on Wayback Machine">⏱</a>
         <button class="icon-btn ${starClass}" title="${i.starred ? 'Unstar' : 'Star'}" onclick="toggleResultStar(this)">${starChar}</button>
         <button class="icon-btn del" title="Delete from index" onclick="deleteResult(this)">🗑</button>
@@ -805,6 +923,34 @@ async function doAsk() {
 
 function hostOf(url) {
   try { return new URL(url).hostname; } catch { return ''; }
+}
+
+async function toggleExpandBody(btn) {
+  const row = btn.closest('.result-item');
+  const isOpen = row.classList.contains('expanded');
+  if (isOpen) {
+    row.classList.remove('expanded');
+    btn.classList.remove('active');
+    return;
+  }
+  const expandEl = row.querySelector('.result-body-expand');
+  if (!expandEl.dataset.loaded) {
+    expandEl.textContent = 'Loading…';
+    row.classList.add('expanded');
+    btn.classList.add('active');
+    const url = row.dataset.url;
+    try {
+      const r = await fetch(`/api/page?url=${encodeURIComponent(url)}`);
+      const data = await r.json();
+      expandEl.textContent = data.body || '(no content stored)';
+    } catch {
+      expandEl.textContent = '(failed to load)';
+    }
+    expandEl.dataset.loaded = '1';
+  } else {
+    row.classList.add('expanded');
+    btn.classList.add('active');
+  }
 }
 
 async function toggleResultStar(btn) {

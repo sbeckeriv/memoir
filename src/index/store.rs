@@ -665,6 +665,22 @@ impl IndexStore {
         Ok(rows)
     }
 
+    pub fn autocomplete(&self, q: &str, limit: u32) -> Result<Vec<String>> {
+        let conn = Connection::open(&self.path)?;
+        let results = conn
+            .prepare(
+                "SELECT DISTINCT title FROM pages
+                 WHERE fetch_status = 'fetched' AND length(title) > 3
+                   AND instr(lower(title), lower(?1)) > 0
+                 ORDER BY last_visit_at DESC
+                 LIMIT ?2",
+            )?
+            .query_map(params![q, limit], |r| r.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(results)
+    }
+
     pub fn get_page(&self, url: &str) -> Result<Option<serde_json::Value>> {
         let conn = Connection::open(&self.path)?;
         let row = conn
