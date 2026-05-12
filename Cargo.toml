@@ -3,7 +3,7 @@ members = [".", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "1.0.10"
+version = "1.0.11"
 
 [package]
 name = "memoir"
@@ -38,5 +38,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tempfile = "3"
 pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
 clap = { version = "4", features = ["derive"] }
+skim = "0.10"
+arboard = "3"
 
 [dev-dependencies]

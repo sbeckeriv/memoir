@@ -3,6 +3,7 @@ pub mod extract;
 use std::time::Duration;
 
 use reqwest::Client;
+use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::config::FetchSettings;
@@ -19,6 +20,25 @@ pub enum FetchResult {
 pub struct Fetcher {
     client: Client,
     delay: Duration,
+    firecrawl_api_key: Option<String>,
+    firecrawl_base_url: String,
+}
+
+#[derive(Deserialize)]
+struct FirecrawlResponse {
+    success: bool,
+    data: Option<FirecrawlData>,
+}
+
+#[derive(Deserialize)]
+struct FirecrawlData {
+    markdown: Option<String>,
+    metadata: Option<FirecrawlMeta>,
+}
+
+#[derive(Deserialize)]
+struct FirecrawlMeta {
+    title: Option<String>,
 }
 
 impl Fetcher {
@@ -30,6 +50,8 @@ impl Fetcher {
         Ok(Self {
             client,
             delay: Duration::from_millis(settings.delay_ms),
+            firecrawl_api_key: settings.firecrawl_api_key.clone(),
+            firecrawl_base_url: settings.firecrawl_base_url.clone(),
         })
     }
 
@@ -93,11 +115,61 @@ impl Fetcher {
         if !is_auth_wall(&final_url, &html) {
             return FetchResult::Ok(extract(&html));
         }
-        // Auth wall — try the Wayback Machine for a cached copy.
+        // Auth wall — try Firecrawl (if configured), then Wayback Machine.
+        if let Some(page) = self.fetch_firecrawl(url).await {
+            return FetchResult::Ok(page);
+        }
         if let Some(page) = self.fetch_wayback(url).await {
             return FetchResult::Ok(page);
         }
         FetchResult::AuthWall
+    }
+
+    async fn fetch_firecrawl(&self, url: &str) -> Option<ExtractedPage> {
+        let api_key = self.firecrawl_api_key.as_deref()?;
+        debug!(%url, "trying Firecrawl");
+        let scrape_url = format!(
+            "{}/v1/scrape",
+            self.firecrawl_base_url.trim_end_matches('/')
+        );
+        let resp = match self
+            .client
+            .post(&scrape_url)
+            .bearer_auth(api_key)
+            .json(&serde_json::json!({ "url": url, "formats": ["markdown"] }))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(%url, error = %e, "firecrawl request failed");
+                return None;
+            }
+        };
+        if !resp.status().is_success() {
+            warn!(%url, status = %resp.status(), "firecrawl returned error status");
+            return None;
+        }
+        let fc: FirecrawlResponse = match resp.json().await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(%url, error = %e, "firecrawl response parse failed");
+                return None;
+            }
+        };
+        if !fc.success {
+            warn!(%url, "firecrawl returned success=false");
+            return None;
+        }
+        let data = fc.data?;
+        let body = data.markdown.unwrap_or_default();
+        if body.is_empty() {
+            warn!(%url, "firecrawl returned empty markdown");
+            return None;
+        }
+        let title = data.metadata.and_then(|m| m.title).unwrap_or_default();
+        debug!(%url, "firecrawl extracted successfully");
+        Some(ExtractedPage { title, body })
     }
 
     async fn fetch_wayback(&self, url: &str) -> Option<ExtractedPage> {

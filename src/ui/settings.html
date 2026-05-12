@@ -224,6 +224,14 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       <label for="ban">Ban list <span class="hint">one host or host/path prefix per line</span></label>
       <textarea id="ban" rows="4" placeholder="web.archive.org&#10;mail.google.com&#10;github.com/myorg"></textarea>
     </div>
+    <div class="field">
+      <label for="firecrawl-base-url">Firecrawl base URL <span class="hint">optional — set to a self-hosted crw/Firecrawl instance, e.g. http://localhost:3002</span></label>
+      <input id="firecrawl-base-url" type="url" placeholder="https://api.firecrawl.dev">
+    </div>
+    <div class="field">
+      <label for="firecrawl-api-key">Firecrawl API key <span class="hint">optional — used as fallback for JS-heavy or auth-walled pages; leave blank to keep existing</span></label>
+      <input id="firecrawl-api-key" type="password" placeholder="fc-…" autocomplete="off">
+    </div>
   </div>
 
   <h2>LLM</h2>
@@ -344,6 +352,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
 
 <script>
 let originalApiKey = null;
+let originalFirecrawlKey = null;
 
 async function load() {
   const r = await fetch('/api/settings');
@@ -369,7 +378,9 @@ async function load() {
   document.getElementById('llm-base-url').value = s.llm?.base_url ?? '';
   document.getElementById('llm-model').value = s.llm?.model ?? '';
   originalApiKey = s.llm?.api_key ?? null;
-  // never pre-fill the api key field; user must re-enter to change it
+  document.getElementById('firecrawl-base-url').value = s.fetch?.firecrawl_base_url ?? '';
+  originalFirecrawlKey = s.fetch?.firecrawl_api_key ?? null;
+  // never pre-fill api key fields; user must re-enter to change them
   document.getElementById('max-context-chars').value = s.llm?.max_context_chars ?? '';
   document.getElementById('system-prompt').value = s.llm?.system_prompt ?? '';
   document.getElementById('interval-mins').value = s.sync?.interval_mins ?? '';
@@ -389,6 +400,8 @@ async function save() {
 
   const apiKeyField = document.getElementById('llm-api-key').value.trim();
   const apiKey = apiKeyField !== '' ? apiKeyField : originalApiKey;
+  const firecrawlKeyField = document.getElementById('firecrawl-api-key').value.trim();
+  const firecrawlKey = firecrawlKeyField !== '' ? firecrawlKeyField : originalFirecrawlKey;
 
   const settings = {
     application: {
@@ -412,6 +425,8 @@ async function save() {
       user_agent: document.getElementById('user-agent').value.trim(),
       max_retries: parseInt(document.getElementById('max-retries').value, 10) || 3,
       ban,
+      firecrawl_base_url: document.getElementById('firecrawl-base-url').value.trim() || 'https://api.firecrawl.dev',
+      ...(firecrawlKey != null ? { firecrawl_api_key: firecrawlKey } : {}),
     },
     llm: {
       provider: document.getElementById('llm-provider').value,
@@ -442,6 +457,8 @@ async function save() {
   if (r.ok) {
     originalApiKey = apiKey;
     document.getElementById('llm-api-key').value = '';
+    originalFirecrawlKey = firecrawlKey;
+    document.getElementById('firecrawl-api-key').value = '';
     showToast('Saved');
   } else {
     showToast('Save failed', true);

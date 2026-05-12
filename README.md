@@ -165,6 +165,12 @@ The built `.app` bundle appears in `src-tauri/target/release/bundle/macos/`.
 ### CLI only (no desktop app)
 
 ```sh
+cargo install --path .
+```
+
+Or build manually:
+
+```sh
 cargo build --release --bin memoir
 cp target/release/memoir /usr/local/bin/memoir
 ```
@@ -204,19 +210,37 @@ The Tauri app starts automatically and keeps running in the menu bar after the w
 
 ## CLI usage
 
-**Sync** — fetch and index pages from your recent history:
-
-```sh
-memoir sync
-```
-
-**Serve** — start the web interface only:
+**Serve** — start the web interface and sync loop:
 
 ```sh
 memoir
 ```
 
-Then open [http://localhost:3000](http://localhost:3000).
+Then open [http://localhost:8734](http://localhost:8734).
+
+**Sync** — fetch and index pages from your recent history (one-shot, no server):
+
+```sh
+memoir sync
+```
+
+**Pick** — interactively fuzzy-search your history index from the terminal:
+
+```sh
+memoir pick            # browse all indexed pages
+memoir pick rust       # pre-filter by full-text search, then fuzzy-pick
+```
+
+Selecting a result opens it in your browser and copies the URL to the clipboard. The selected URL is also printed to stdout, so you can pipe it:
+
+```sh
+memoir pick | xargs open   # redundant but works
+memoir pick rust > url.txt
+```
+
+The search uses the same FTS5 index as the web UI — it matches against page titles, body text, and URLs.
+
+The CLI reads the same config and index as the desktop app (`~/.memoir/`), so no separate setup is needed if you already have the Tauri app running.
 
 Pass `--no-sync` to skip the background sync loop (useful if you only want the UI or are running sync separately):
 
@@ -394,7 +418,8 @@ kind = "orion"   # orion | chrome | brave | arc | edge | chromium
 delay_ms = 200
 timeout_secs = 15
 ban = ["web.archive.org", "mail.google.com"]
-# custom_css = ""   # CSS applied to all pages — see HTML.md for available classes
+# firecrawl_api_key = "fc-..."          # enables Firecrawl as auth-wall fallback
+# firecrawl_base_url = "http://localhost:3002"  # self-hosted crw or Firecrawl instance
 
 [llm]
 provider = "lm_studio"              # none | lm_studio | openai | anthropic
@@ -414,7 +439,7 @@ For the full option reference see [CONFIG.md](CONFIG.md). For CSS class names av
 
 ## How it works
 
-1. **Sync** reads the 1,000 most recent URLs from your browser's SQLite history, registers any new ones, then fetches and extracts text from each page — respecting a configurable crawl delay, skipping auth walls and non-HTML content. URLs that fail 3 times are marked and no longer retried.
+1. **Sync** reads the 1,000 most recent URLs from your browser's SQLite history, registers any new ones, then fetches and extracts text from each page — respecting a configurable crawl delay, skipping auth walls and non-HTML content. URLs that fail 3 times are marked and no longer retried. When a page returns an auth wall, memoir tries [Firecrawl](https://www.firecrawl.dev) (if an API key is configured) and then the Wayback Machine as fallbacks before giving up.
 
 2. Fetched pages are stored in `index.db` and inserted into an FTS5 virtual table for BM25-ranked full-text search.
 

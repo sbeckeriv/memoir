@@ -151,6 +151,8 @@ pub struct FetchSettings {
     pub user_agent: String,
     pub ban: Vec<String>,
     pub max_retries: u32,
+    pub firecrawl_api_key: Option<String>,
+    pub firecrawl_base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,6 +214,8 @@ impl Default for FetchSettings {
             user_agent: "memoir/0.1 (personal history indexer)".to_string(),
             ban: DEFAULT_BAN_LIST.iter().map(|s| s.to_string()).collect(),
             max_retries: 3,
+            firecrawl_api_key: None,
+            firecrawl_base_url: "https://api.firecrawl.dev".to_string(),
         }
     }
 }

@@ -1,9 +1,11 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use clap::{Parser, Subcommand};
 use memoir::{Application, EmbedText, Embedder, Settings, config::LlmProvider};
+use skim::prelude::*;
 
 #[derive(Parser)]
 #[command(name = "memoir")]
@@ -26,6 +28,89 @@ struct Cli {
 enum Commands {
     /// Run a one-shot sync without starting the server
     Sync,
+    /// Interactively pick a page from history (fuzzy search)
+    Pick {
+        /// Pre-filter query (optional; narrows initial results before fuzzy search)
+        query: Option<String>,
+    },
+}
+
+struct PickItem {
+    url: String,
+    display: String,
+}
+
+impl SkimItem for PickItem {
+    fn text(&self) -> Cow<'_, str> {
+        Cow::Borrowed(&self.display)
+    }
+    fn output(&self) -> Cow<'_, str> {
+        Cow::Borrowed(&self.url)
+    }
+}
+
+fn run_pick(config: &Settings, query: Option<String>) -> anyhow::Result<()> {
+    let db_path = config.data.dir.join("index.db");
+    let store = memoir::IndexStore::open(&db_path)?;
+
+    let entries: Vec<(String, String)> = if let Some(q) = &query {
+        store
+            .search(q, 5000)?
+            .into_iter()
+            .map(|r| (r.url, r.title))
+            .collect()
+    } else {
+        store
+            .list_pages(10000, 0, None)?
+            .into_iter()
+            .map(|p| (p.url, p.title))
+            .collect()
+    };
+
+    if entries.is_empty() {
+        eprintln!("No pages in index.");
+        return Ok(());
+    }
+
+    let (tx, rx): (SkimItemSender, SkimItemReceiver) = unbounded();
+    for (url, title) in &entries {
+        let display = if title.is_empty() {
+            url.clone()
+        } else {
+            format!("{title}  \x1b[2m{url}\x1b[0m")
+        };
+        let _ = tx.send(Arc::new(PickItem {
+            url: url.clone(),
+            display,
+        }));
+    }
+    drop(tx);
+
+    let options = SkimOptionsBuilder::default()
+        .height(Some("40%"))
+        .build()
+        .unwrap();
+
+    let selected = Skim::run_with(&options, Some(rx))
+        .filter(|out| !out.is_abort)
+        .map(|out| out.selected_items)
+        .unwrap_or_default();
+
+    for item in &selected {
+        let url = item.output().into_owned();
+        if url.is_empty() {
+            continue;
+        }
+
+        if let Ok(mut cb) = arboard::Clipboard::new() {
+            let _ = cb.set_text(&url);
+        }
+
+        let _ = std::process::Command::new("open").arg(&url).spawn();
+        println!("{url}");
+    }
+
+    Ok(())
 }
 
 async fn load_embedder(config: &Settings) -> Option<Arc<dyn EmbedText>> {
@@ -68,6 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     match cli.command {
         Some(Commands::Sync) => memoir::sync::run(&config, embedder, None).await?,
+        Some(Commands::Pick { query }) => run_pick(&config, query)?,
         None => {
             let sync_paused = Arc::new(AtomicBool::new(false));
             let app =
