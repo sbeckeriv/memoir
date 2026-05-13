@@ -345,6 +345,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       <label>Software update</label>
       <button class="btn btn-secondary" id="btn-check-update" onclick="checkUpdate()">Check for Updates…</button>
       <span id="update-status" style="font-size:0.85rem;margin-left:0.75rem"></span>
+      <button class="btn btn-primary" id="btn-restart-update" style="display:none;margin-left:0.75rem" onclick="restartToUpdate()">Restart to Update</button>
     </div>
   </div>
 
@@ -589,12 +590,20 @@ loadVersion();
 
 let updatePollTimer = null;
 
+async function restartToUpdate() {
+  const btn = document.getElementById('btn-restart-update');
+  btn.disabled = true;
+  btn.textContent = 'Restarting…';
+  await fetch('/api/update/restart', { method: 'POST' }).catch(() => {});
+}
+
 async function checkUpdate() {
   const btn = document.getElementById('btn-check-update');
   const status = document.getElementById('update-status');
   btn.disabled = true;
   status.textContent = 'Checking…';
   status.style.color = '';
+  document.getElementById('btn-restart-update').style.display = 'none';
   clearInterval(updatePollTimer);
 
   try {
@@ -611,16 +620,23 @@ async function checkUpdate() {
       const r = await fetch('/api/update/status');
       if (!r.ok) return;
       const { status: s } = await r.json();
-      if (!s || s === 'checking') return;
+      if (!s || s === 'checking' || s === 'downloading') {
+        if (s === 'downloading') {
+          status.textContent = 'Downloading…';
+          status.style.color = '#1976d2';
+        }
+        return;
+      }
       clearInterval(updatePollTimer);
       btn.disabled = false;
       if (s === 'up_to_date') {
         status.textContent = '✓ Already up to date';
         status.style.color = '#4caf50';
-      } else if (s.startsWith('installing:')) {
-        status.textContent = `Downloading v${s.slice(11)}…`;
+      } else if (s.startsWith('downloaded:')) {
+        const ver = s.slice(11);
+        status.textContent = `v${ver} ready —`;
         status.style.color = '#1976d2';
-        return; // keep polling
+        document.getElementById('btn-restart-update').style.display = '';
       } else if (s.startsWith('error:')) {
         status.textContent = s.slice(6);
         status.style.color = '#e53935';
