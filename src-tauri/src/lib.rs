@@ -291,6 +291,18 @@ pub fn run() {
                             }
                         });
 
+                        // Daily background update check: fire every 24 h after the first check.
+                        let daily_update_notify = server.update_requested();
+                        let daily_config = server.state.config.clone();
+                        tauri::async_runtime::spawn(async move {
+                            loop {
+                                tokio::time::sleep(std::time::Duration::from_secs(86_400)).await;
+                                if daily_config.read().unwrap().application.auto_update {
+                                    daily_update_notify.notify_one();
+                                }
+                            }
+                        });
+
                         // Handle restart requests from the web UI: install pending update.
                         let restart_requested = server.restart_requested();
                         let update_status_restart = server.update_status();

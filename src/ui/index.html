@@ -570,7 +570,7 @@ main {
     </div>
     <button class="btn btn-search" id="btn-search">Search</button>
   </div>
-  <span class="header-nav"><a href="/manage">Manage</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
+  <span class="header-nav"><a href="/manage">Manage</a> · <a href="/chat">Chat</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
   <div id="update-notice" class="update-notice">
     <span id="update-version"></span>
     · <a id="update-url" href="#" target="_blank">Release notes</a>
@@ -1018,21 +1018,27 @@ async function loadStats() {
     } else if (typeof embedStatus === 'string' && embedStatus.startsWith('error:')) {
       text += ' · semantic search unavailable';
     }
-    if (syncStatus?.last_sync_at) {
-      const d = new Date(syncStatus.last_sync_at * 1000);
-      const now = Date.now();
-      const diffMs = now - d.getTime();
-      let ago;
-      if (diffMs < 60000) {
-        ago = 'just now';
-      } else if (diffMs < 3600000) {
-        ago = `${Math.floor(diffMs / 60000)}m ago`;
-      } else if (diffMs < 86400000) {
-        ago = `${Math.floor(diffMs / 3600000)}h ago`;
+    if (syncStatus) {
+      if (syncStatus.paused) {
+        text += ' · sync paused';
+      } else if (syncStatus.last_sync_at) {
+        const d = new Date(syncStatus.last_sync_at * 1000);
+        const now = Date.now();
+        const diffMs = now - d.getTime();
+        let ago;
+        if (diffMs < 60000) {
+          ago = 'just now';
+        } else if (diffMs < 3600000) {
+          ago = `${Math.floor(diffMs / 60000)}m ago`;
+        } else if (diffMs < 86400000) {
+          ago = `${Math.floor(diffMs / 3600000)}h ago`;
+        } else {
+          ago = d.toLocaleDateString();
+        }
+        text += ` · synced ${ago}`;
       } else {
-        ago = d.toLocaleDateString();
+        text += ' · never synced';
       }
-      text += ` · synced ${ago}`;
     }
     bar.textContent = text;
     bar.style.display = 'block';

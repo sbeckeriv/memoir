@@ -28,6 +28,11 @@ pub enum LlmProvider {
 }
 
 fn home_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    return std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("C:\\Users"));
+    #[cfg(not(target_os = "windows"))]
     std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/"))
@@ -120,6 +125,7 @@ pub struct ApplicationSettings {
     pub custom_css: String,
     pub hotkey: String,
     pub cluster_score_high: f64,
+    pub auto_update: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,7 +171,15 @@ pub struct LlmSettings {
     /// Total character budget for the context block sent to the LLM.
     /// Divided evenly across retrieved sources. Default: 8000 (~2k tokens).
     pub max_context_chars: usize,
+    /// Maximum tokens the LLM may generate in a single reply. Default: 2048.
+    pub max_tokens: u32,
     pub system_prompt: Option<String>,
+    /// Raw JSON object merged into every LLM API request body. Useful for
+    /// model-specific parameters not covered by dedicated config fields.
+    /// Example: `'{"thinking": {"type": "disabled"}}'` disables Qwen3 thinking mode.
+    pub extra_params: Option<String>,
+    /// Override model used for /chat (multi-turn). Falls back to `model` when unset.
+    pub chat_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +199,7 @@ impl Default for ApplicationSettings {
             custom_css: String::new(),
             hotkey: "CmdOrCtrl+Shift+Space".to_string(),
             cluster_score_high: 0.65,
+            auto_update: true,
         }
     }
 }
@@ -192,10 +207,35 @@ impl Default for ApplicationSettings {
 impl Default for BrowserSettings {
     fn default() -> Self {
         Self {
-            history_db_path: home_dir().join("Library/Application Support/Orion/Defaults/history"),
-            kind: BrowserKind::Orion,
+            history_db_path: default_history_db_path(),
+            kind: default_browser_kind(),
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn default_history_db_path() -> PathBuf {
+    home_dir().join("Library/Application Support/Orion/Defaults/history")
+}
+
+#[cfg(target_os = "windows")]
+fn default_history_db_path() -> PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home_dir().join("AppData/Local"))
+        .join("Google/Chrome/User Data/Default/History")
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn default_history_db_path() -> PathBuf {
+    home_dir().join(".config/google-chrome/Default/History")
+}
+
+fn default_browser_kind() -> BrowserKind {
+    #[cfg(target_os = "macos")]
+    return BrowserKind::Orion;
+    #[cfg(not(target_os = "macos"))]
+    BrowserKind::Chrome
 }
 
 impl Default for DataSettings {
@@ -268,7 +308,10 @@ impl Default for LlmSettings {
             model: "local-model".to_string(),
             api_key: None,
             max_context_chars: 8_000,
+            max_tokens: 2048,
             system_prompt: None,
+            extra_params: None,
+            chat_model: None,
         }
     }
 }

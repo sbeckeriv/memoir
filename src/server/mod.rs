@@ -209,6 +209,8 @@ fn build_router(state: AppState) -> Router {
         .route("/api/search", get(handlers::search))
         .route("/api/autocomplete", get(handlers::autocomplete))
         .route("/api/ask", get(handlers::ask_get).post(handlers::ask))
+        .route("/chat", get(handlers::chat_page))
+        .route("/api/chat", post(handlers::chat))
         .route("/api/stats", get(handlers::stats))
         .route("/api/favicon", get(handlers::favicon))
         .route("/api/pages", get(handlers::list_pages))

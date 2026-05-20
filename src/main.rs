@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 
 use clap::{Parser, Subcommand};
 use memoir::{Application, EmbedText, Embedder, Settings, config::LlmProvider};
+#[cfg(not(target_os = "windows"))]
 use skim::prelude::*;
 
 #[derive(Parser)]
@@ -28,18 +29,21 @@ struct Cli {
 enum Commands {
     /// Run a one-shot sync without starting the server
     Sync,
-    /// Interactively pick a page from history (fuzzy search)
+    /// Interactively pick a page from history (fuzzy search, macOS/Linux only)
+    #[cfg(not(target_os = "windows"))]
     Pick {
         /// Pre-filter query (optional; narrows initial results before fuzzy search)
         query: Option<String>,
     },
 }
 
+#[cfg(not(target_os = "windows"))]
 struct PickItem {
     url: String,
     display: String,
 }
 
+#[cfg(not(target_os = "windows"))]
 impl SkimItem for PickItem {
     fn text(&self) -> Cow<'_, str> {
         Cow::Borrowed(&self.display)
@@ -49,6 +53,7 @@ impl SkimItem for PickItem {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn run_pick(config: &Settings, query: Option<String>) -> anyhow::Result<()> {
     let db_path = config.data.dir.join("index.db");
     let store = memoir::IndexStore::open(&db_path)?;
@@ -106,7 +111,10 @@ fn run_pick(config: &Settings, query: Option<String>) -> anyhow::Result<()> {
             let _ = cb.set_text(&url);
         }
 
+        #[cfg(target_os = "macos")]
         let _ = std::process::Command::new("open").arg(&url).spawn();
+        #[cfg(not(target_os = "macos"))]
+        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
         println!("{url}");
     }
 
@@ -153,6 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     match cli.command {
         Some(Commands::Sync) => memoir::sync::run(&config, embedder, None).await?,
+        #[cfg(not(target_os = "windows"))]
         Some(Commands::Pick { query }) => run_pick(&config, query)?,
         None => {
             let sync_paused = Arc::new(AtomicBool::new(false));

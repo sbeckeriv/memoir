@@ -40,6 +40,7 @@ src/ui/               — embedded HTML pages (single-file, inline CSS + JS)
   manage.html         — browse/star/delete/ban index entries            (body.page-manage)
   settings.html       — settings form                                   (body.page-settings)
   log.html            — activity log                                    (body.page-log)
+  chat.html           — multi-turn chat interface                        (body.page-chat)
   palette.html        — floating quick-search overlay                   (body.page-palette)
   setup.html          — first-run wizard                                (body.page-setup)
 

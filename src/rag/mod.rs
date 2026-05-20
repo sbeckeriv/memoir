@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
@@ -84,16 +86,41 @@ pub struct LlmClient {
     pub base_url: String,
     pub model: String,
     pub api_key: Option<String>,
+    pub max_tokens: u32,
+    extra_params: Option<serde_json::Value>,
 }
 
 impl LlmClient {
     pub fn new(settings: &LlmSettings) -> Self {
+        let extra_params =
+            settings
+                .extra_params
+                .as_deref()
+                .and_then(|s| match serde_json::from_str(s) {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warn!("llm.extra_params is not valid JSON, ignoring: {e}");
+                        None
+                    }
+                });
         Self {
             client: Client::new(),
             provider: settings.provider,
             base_url: settings.base_url.clone(),
             model: settings.model.clone(),
             api_key: settings.api_key.clone(),
+            max_tokens: settings.max_tokens,
+            extra_params,
+        }
+    }
+
+    fn apply_extra(&self, body: &mut serde_json::Value) {
+        if let (Some(extra), Some(obj)) = (&self.extra_params, body.as_object_mut())
+            && let Some(extra_obj) = extra.as_object()
+        {
+            for (k, v) in extra_obj {
+                obj.insert(k.clone(), v.clone());
+            }
         }
     }
 
@@ -174,6 +201,327 @@ impl LlmClient {
         }
     }
 
+    pub async fn generate_conversation(
+        &self,
+        history: &[(String, String)],
+        system_prompt: Option<&str>,
+    ) -> anyhow::Result<String> {
+        match self.provider {
+            LlmProvider::Disabled => anyhow::bail!("LLM is disabled (provider = \"none\")"),
+            LlmProvider::Anthropic => self.conversation_anthropic(history, system_prompt).await,
+            _ => self.conversation_openai(history, system_prompt).await,
+        }
+    }
+
+    /// Multi-turn chat with tool calling. The LLM may call `search_history` or
+    /// `get_page`; `tool_fn(name, args)` dispatches each call and returns
+    /// (xml_content, source_urls).
+    pub async fn generate_with_tools<F, Fut>(
+        &self,
+        history: &[(String, String)],
+        system: &str,
+        tool_fn: F,
+    ) -> anyhow::Result<(String, Vec<String>)>
+    where
+        F: Fn(String, serde_json::Value) -> Fut,
+        Fut: Future<Output = anyhow::Result<(String, Vec<String>)>>,
+    {
+        match self.provider {
+            LlmProvider::Disabled => anyhow::bail!("LLM is disabled (provider = \"none\")"),
+            LlmProvider::Anthropic => self.chat_anthropic_tools(history, system, tool_fn).await,
+            _ => self.chat_openai_tools(history, system, tool_fn).await,
+        }
+    }
+
+    async fn chat_openai_tools<F, Fut>(
+        &self,
+        history: &[(String, String)],
+        system: &str,
+        tool_fn: F,
+    ) -> anyhow::Result<(String, Vec<String>)>
+    where
+        F: Fn(String, serde_json::Value) -> Fut,
+        Fut: Future<Output = anyhow::Result<(String, Vec<String>)>>,
+    {
+        use serde_json::json;
+        let url = format!("{}/v1/chat/completions", self.base_url);
+
+        let tools = json!([
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_history",
+                    "description": "Search the user's personal browsing history index for pages they have previously visited. Use this when the user asks about something they may have read or researched.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string", "description": "Search terms" }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_page",
+                    "description": "Retrieve the full indexed body of a specific page by URL. Use this after search_history identifies a relevant page and you need its complete content to answer the question in depth.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": { "type": "string", "description": "The exact URL of the page to retrieve" }
+                        },
+                        "required": ["url"]
+                    }
+                }
+            }
+        ]);
+
+        let mut messages: Vec<serde_json::Value> = Vec::new();
+        messages.push(json!({ "role": "system", "content": system }));
+        for (role, content) in history {
+            messages.push(json!({ "role": role, "content": content }));
+        }
+
+        let mut all_sources: Vec<String> = Vec::new();
+
+        for _ in 0..8 {
+            let mut body = json!({
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "messages": messages,
+                "tools": tools,
+                "stream": false,
+            });
+            self.apply_extra(&mut body);
+            let mut req = self.client.post(&url).json(&body);
+            if let Some(key) = &self.api_key {
+                req = req.header("Authorization", format!("Bearer {key}"));
+            }
+            let resp = req.send().await?;
+            let status = resp.status();
+            let body = resp.text().await?;
+            if !status.is_success() {
+                anyhow::bail!("LLM returned {status}: {body}");
+            }
+            let parsed: serde_json::Value = serde_json::from_str(&body)?;
+            let choice = &parsed["choices"][0];
+            let finish_reason = choice["finish_reason"].as_str().unwrap_or("stop");
+            let message = choice["message"].clone();
+
+            if finish_reason == "tool_calls" {
+                messages.push(message.clone());
+                if let Some(calls) = message["tool_calls"].as_array() {
+                    for tc in calls {
+                        let call_id = tc["id"].as_str().unwrap_or("").to_string();
+                        let name = tc["function"]["name"].as_str().unwrap_or("").to_string();
+                        let args: serde_json::Value = serde_json::from_str(
+                            tc["function"]["arguments"].as_str().unwrap_or("{}"),
+                        )
+                        .unwrap_or_default();
+                        let (xml, urls) = tool_fn(name, args).await?;
+                        all_sources.extend(urls);
+                        messages.push(json!({
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": xml,
+                        }));
+                    }
+                }
+            } else {
+                let text = message["content"].as_str().unwrap_or("").to_string();
+                return Ok((text, all_sources));
+            }
+        }
+        anyhow::bail!("tool call loop exceeded maximum iterations")
+    }
+
+    async fn chat_anthropic_tools<F, Fut>(
+        &self,
+        history: &[(String, String)],
+        system: &str,
+        tool_fn: F,
+    ) -> anyhow::Result<(String, Vec<String>)>
+    where
+        F: Fn(String, serde_json::Value) -> Fut,
+        Fut: Future<Output = anyhow::Result<(String, Vec<String>)>>,
+    {
+        use serde_json::json;
+        let url = format!("{}/v1/messages", self.base_url);
+        let api_key = self.api_key.as_deref().unwrap_or("");
+
+        let tools = json!([
+            {
+                "name": "search_history",
+                "description": "Search the user's personal browsing history index for pages they have previously visited.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string", "description": "Search terms" }
+                    },
+                    "required": ["query"]
+                }
+            },
+            {
+                "name": "get_page",
+                "description": "Retrieve the full indexed body of a specific page by URL. Use this after search_history identifies a relevant page and you need its complete content to answer the question in depth.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "url": { "type": "string", "description": "The exact URL of the page to retrieve" }
+                    },
+                    "required": ["url"]
+                }
+            }
+        ]);
+
+        let mut messages: Vec<serde_json::Value> = history
+            .iter()
+            .map(|(role, content)| json!({ "role": role, "content": content }))
+            .collect();
+
+        let mut all_sources: Vec<String> = Vec::new();
+
+        for _ in 0..8 {
+            let mut body = json!({
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "system": system,
+                "messages": messages,
+                "tools": tools,
+            });
+            self.apply_extra(&mut body);
+            let resp = self
+                .client
+                .post(&url)
+                .header("x-api-key", api_key)
+                .header("anthropic-version", "2023-06-01")
+                .json(&body)
+                .send()
+                .await?;
+            let status = resp.status();
+            let body = resp.text().await?;
+            if !status.is_success() {
+                anyhow::bail!("Anthropic returned {status}: {body}");
+            }
+            let parsed: serde_json::Value = serde_json::from_str(&body)?;
+            let stop_reason = parsed["stop_reason"].as_str().unwrap_or("end_turn");
+            let content = parsed["content"].as_array().cloned().unwrap_or_default();
+
+            if stop_reason == "tool_use" {
+                messages.push(json!({ "role": "assistant", "content": content }));
+                let mut results: Vec<serde_json::Value> = Vec::new();
+                for block in &content {
+                    if block["type"].as_str() == Some("tool_use") {
+                        let id = block["id"].as_str().unwrap_or("").to_string();
+                        let name = block["name"].as_str().unwrap_or("").to_string();
+                        let args = block["input"].clone();
+                        let (xml, urls) = tool_fn(name, args).await?;
+                        all_sources.extend(urls);
+                        results.push(json!({
+                            "type": "tool_result",
+                            "tool_use_id": id,
+                            "content": xml,
+                        }));
+                    }
+                }
+                messages.push(json!({ "role": "user", "content": results }));
+            } else {
+                let text = content
+                    .iter()
+                    .find(|b| b["type"].as_str() == Some("text"))
+                    .and_then(|b| b["text"].as_str())
+                    .unwrap_or("")
+                    .to_string();
+                return Ok((text, all_sources));
+            }
+        }
+        anyhow::bail!("tool call loop exceeded maximum iterations")
+    }
+
+    async fn conversation_openai(
+        &self,
+        history: &[(String, String)],
+        system_prompt: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let url = format!("{}/v1/chat/completions", self.base_url);
+        let mut messages = Vec::new();
+        if let Some(sp) = system_prompt {
+            messages.push(ChatMessage {
+                role: "system".into(),
+                content: sp.into(),
+            });
+        }
+        for (role, content) in history {
+            messages.push(ChatMessage {
+                role: role.clone(),
+                content: content.clone(),
+            });
+        }
+        let mut req = self.client.post(&url).json(&ChatRequest {
+            model: self.model.clone(),
+            messages,
+            stream: false,
+        });
+        if let Some(key) = &self.api_key {
+            req = req.header("Authorization", format!("Bearer {key}"));
+        }
+        let resp = req.send().await?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("LLM returned {status}: {body}");
+        }
+        let parsed: ChatResponse = serde_json::from_str(&body)?;
+        Ok(parsed
+            .choices
+            .into_iter()
+            .next()
+            .map(|c| c.message.content)
+            .unwrap_or_default())
+    }
+
+    async fn conversation_anthropic(
+        &self,
+        history: &[(String, String)],
+        system_prompt: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let url = format!("{}/v1/messages", self.base_url);
+        let messages: Vec<ChatMessage> = history
+            .iter()
+            .map(|(r, c)| ChatMessage {
+                role: r.clone(),
+                content: c.clone(),
+            })
+            .collect();
+        let api_key = self.api_key.as_deref().unwrap_or("");
+        let resp = self
+            .client
+            .post(&url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&AnthropicRequest {
+                model: &self.model,
+                max_tokens: self.max_tokens,
+                messages,
+                system: system_prompt,
+            })
+            .send()
+            .await?;
+        let status = resp.status();
+        let body = resp.text().await?;
+        if !status.is_success() {
+            anyhow::bail!("Anthropic returned {status}: {body}");
+        }
+        let parsed: AnthropicResponse = serde_json::from_str(&body)?;
+        Ok(parsed
+            .content
+            .into_iter()
+            .find(|c| c.content_type == "text")
+            .and_then(|c| c.text)
+            .unwrap_or_default())
+    }
+
     async fn generate_openai(
         &self,
         prompt: &str,
@@ -242,7 +590,7 @@ impl LlmClient {
             .header("anthropic-version", "2023-06-01")
             .json(&AnthropicRequest {
                 model: &self.model,
-                max_tokens: 1024,
+                max_tokens: self.max_tokens,
                 messages: vec![ChatMessage {
                     role: "user".to_string(),
                     content: prompt.to_string(),

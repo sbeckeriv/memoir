@@ -160,6 +160,7 @@ provider = "lm_studio"
 base_url = "http://localhost:1234"
 model = "local-model"
 max_context_chars = 8000
+max_tokens = 2048
 # api_key = ""
 # system_prompt = ""
 ```
@@ -171,6 +172,7 @@ max_context_chars = 8000
 | `model` | `local-model` | Model name passed to the API |
 | `api_key` | *(unset)* | API key. Omit for local models |
 | `max_context_chars` | `8000` | Total characters of page content sent to the LLM per query (~2k tokens) |
+| `max_tokens` | `2048` | Maximum tokens the LLM may generate per reply. Applies to `/ask` and `/chat` |
 | `system_prompt` | *(built-in default)* | System prompt prepended to every `/ask` query. The current date is always prepended automatically. Omit to use the built-in prompt |
 
 ## `[sync]`

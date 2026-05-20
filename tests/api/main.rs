@@ -3,6 +3,7 @@ mod health_check;
 mod helpers;
 mod index_page;
 mod log;
+mod manage;
 mod recent;
 mod search;
 mod top_sites;

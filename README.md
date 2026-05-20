@@ -45,6 +45,12 @@ Hotkey popup:
 - Returns source URLs alongside the answer
 - Fully optional — all other features work without a running LLM
 
+**Chat**
+- Multi-turn conversational interface at `/chat`
+- Every message automatically searches your history and injects relevant pages as context
+- Answers are grounded in what you've actually read, with clickable source pills per response
+- Conversation history is kept client-side; the backend is stateless
+
 **Quick Palette**
 - Press **⌘⇧Space** anywhere to open a floating search palette
 - Results appear inline as you type — no need to open a full browser tab
@@ -224,7 +230,7 @@ Then open [http://localhost:8734](http://localhost:8734).
 memoir sync
 ```
 
-**Pick** — interactively fuzzy-search your history index from the terminal:
+**Pick** — interactively fuzzy-search your history index from the terminal (macOS and Linux only):
 
 ```sh
 memoir pick            # browse all indexed pages
@@ -347,7 +353,9 @@ The web interface is backed by a local Axum server. You can call it directly fro
 | `GET` | `/api/settings` | Get current settings |
 | `POST` | `/api/settings` | Save settings |
 | `GET` | `/api/open-url?url=…` | Open a URL in the default browser |
+| `GET` | `/chat` | Chat page (multi-turn conversational interface) |
 | `GET` | `/log` | Activity log page |
+| `POST` | `/api/chat` | Multi-turn chat with history-grounded answers |
 | `GET` | `/api/log?kind=…` | Session log entries (all, or filtered by `sync`/`search`/`llm`/`error`) |
 
 **Search response:**
@@ -376,6 +384,31 @@ The web interface is backed by a local Axum server. You can call it directly fro
 ```
 
 `/api/ask` returns `503` if the embedding model is unavailable, and `{"answer": "No relevant pages found.", "sources": []}` if no indexed pages match.
+
+**Chat request** (`POST /api/chat`):
+
+```json
+{
+  "messages": [
+    { "role": "user", "content": "What was I reading about Rust last week?" },
+    { "role": "assistant", "content": "You read several articles about…" },
+    { "role": "user", "content": "Which one covered async cancellation?" }
+  ],
+  "k": 5
+}
+```
+
+**Chat response:**
+
+```json
+{
+  "answer": "<p>The article on async cancellation was…</p>",
+  "answer_md": "The article on async cancellation was…",
+  "sources": ["https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html"]
+}
+```
+
+`answer` is HTML for rendering; `answer_md` is the raw markdown to append to `messages` for the next turn. The backend searches your index on every turn — no separate retrieval call needed.
 
 ---
 

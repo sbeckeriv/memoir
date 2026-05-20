@@ -11,6 +11,7 @@ Each page sets a class on `<body>` so you can target a specific page:
 | `body.page-home` | Search (home) |
 | `body.page-manage` | Manage |
 | `body.page-settings` | Settings |
+| `body.page-chat` | Chat |
 | `body.page-log` | Activity log |
 | `body.page-palette` | Quick-search palette (dark overlay) |
 
@@ -343,3 +344,49 @@ Keyboard shortcut legend at the bottom.
 ### `.kbd`
 
 Individual key hint badge inside the footer.
+
+---
+
+## Chat page (`body.page-chat`)
+
+### `.thread-wrap`
+
+Scrollable message thread area. Grows to fill the viewport between the header and composer.
+
+### `.msg`
+
+One message row. Role modifiers:
+- `.msg.user` — right-aligned blue bubble
+- `.msg.assistant` — left-aligned white bubble
+
+### `.bubble`
+
+The message content area. Standard HTML elements (`p`, `ul`, `ol`, `h1`–`h3`, `code`, `pre`, `a`, `blockquote`) are styled inside `.msg.assistant .bubble`.
+
+### `.thinking`
+
+Applied to the assistant message row while waiting for a response. Renders a dashed, italic bubble with an animated `…` suffix.
+
+### `.sources`
+
+Flex row of source pills rendered below an assistant bubble.
+
+### `.source-pill`
+
+One clickable source link, displaying the hostname. Opens the source URL in a new tab.
+
+### `.empty-state`
+
+Centered placeholder shown before the first message is sent.
+
+### `.composer`
+
+Fixed bottom bar containing the textarea and send button.
+
+### `#input`
+
+Auto-growing textarea. Expands up to 160 px; submits on Enter (Shift+Enter inserts a newline).
+
+### `#send-btn`
+
+Blue send button. Disabled while a request is in-flight or the textarea is empty.
