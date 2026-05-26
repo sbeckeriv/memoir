@@ -148,6 +148,18 @@ header h1 a { display: block; }
 }
 .source-pill:hover { background: #e0eaff; }
 
+.nerd-stats {
+  margin-top: 0.35rem;
+  padding: 0 0.2rem;
+  font-size: 0.72rem;
+  color: #bbb;
+  font-family: ui-monospace, monospace;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.nerd-stats span { white-space: nowrap; }
+
 .tool-trace {
   margin-top: 0.35rem;
   padding: 0 0.2rem;
@@ -349,7 +361,7 @@ form.addEventListener('submit', async e => {
       appendErrorMsg('Something went wrong. Is the LLM configured?');
     } else {
       const data = await resp.json();
-      appendAssistantMsg(data.answer, data.sources, data.tool_calls);
+      appendAssistantMsg(data.answer, data.sources, data.tool_calls, data.usage);
       messages.push({ role: 'assistant', content: data.answer_md });
     }
   } catch (err) {
@@ -370,7 +382,7 @@ function appendUserMsg(text) {
   scrollToBottom();
 }
 
-function appendAssistantMsg(html, sources, toolCalls) {
+function appendAssistantMsg(html, sources, toolCalls, usage) {
   const el = document.createElement('div');
   el.className = 'msg assistant';
   let inner = `<div class="bubble">${html}</div>`;
@@ -389,6 +401,11 @@ function appendAssistantMsg(html, sources, toolCalls) {
       return `<li><span class="tt-icon">${icon}</span><span>${verb}</span><span class="tt-arg">${esc(tc.arg)}</span></li>`;
     }).join('');
     inner += `<details class="tool-trace"><summary><span class="tt-chevron">▶</span>${esc(label)}</summary><ul>${items}</ul></details>`;
+  }
+  if (usage && usage.total_tokens) {
+    let stats = `<span>↑${usage.prompt_tokens.toLocaleString()} in</span><span>↓${usage.completion_tokens.toLocaleString()} out</span><span>∑${usage.total_tokens.toLocaleString()} total</span>`;
+    if (usage.reasoning_tokens) stats += `<span>💭${usage.reasoning_tokens.toLocaleString()} reasoning</span>`;
+    inner += `<div class="nerd-stats">${stats}</div>`;
   }
   el.innerHTML = inner;
   thread.appendChild(el);

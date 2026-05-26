@@ -585,6 +585,7 @@ pub struct ChatReply {
     pub answer_md: String,
     pub sources: Vec<String>,
     pub tool_calls: Vec<ChatToolCall>,
+    pub usage: crate::rag::Usage,
 }
 
 pub async fn chat_page() -> Html<&'static str> {
@@ -784,7 +785,7 @@ pub async fn chat(
     if let Some(m) = state.config.read().unwrap().llm.chat_model.clone() {
         llm.model = m;
     }
-    let (answer_md, tool_sources) = llm
+    let (answer_md, tool_sources, usage) = llm
         .generate_with_tools(&history, &system, tool_fn)
         .await
         .map_err(|e| {
@@ -820,6 +821,7 @@ pub async fn chat(
         answer_md,
         sources: all_sources,
         tool_calls,
+        usage,
     }))
 }
 

@@ -12,6 +12,26 @@ pub struct AskResponse {
     pub sources: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Usage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u64>,
+}
+
+impl Usage {
+    fn accumulate(&mut self, other: &Usage) {
+        self.prompt_tokens += other.prompt_tokens;
+        self.completion_tokens += other.completion_tokens;
+        self.total_tokens += other.total_tokens;
+        if let Some(r) = other.reasoning_tokens {
+            *self.reasoning_tokens.get_or_insert(0) += r;
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct ChatRequest {
     model: String,
@@ -221,7 +241,7 @@ impl LlmClient {
         history: &[(String, String)],
         system: &str,
         tool_fn: F,
-    ) -> anyhow::Result<(String, Vec<String>)>
+    ) -> anyhow::Result<(String, Vec<String>, Usage)>
     where
         F: Fn(String, serde_json::Value) -> Fut,
         Fut: Future<Output = anyhow::Result<(String, Vec<String>)>>,
@@ -238,7 +258,7 @@ impl LlmClient {
         history: &[(String, String)],
         system: &str,
         tool_fn: F,
-    ) -> anyhow::Result<(String, Vec<String>)>
+    ) -> anyhow::Result<(String, Vec<String>, Usage)>
     where
         F: Fn(String, serde_json::Value) -> Fut,
         Fut: Future<Output = anyhow::Result<(String, Vec<String>)>>,
@@ -284,6 +304,7 @@ impl LlmClient {
         }
 
         let mut all_sources: Vec<String> = Vec::new();
+        let mut total_usage = Usage::default();
 
         for _ in 0..8 {
             let mut body = json!({
@@ -305,6 +326,17 @@ impl LlmClient {
                 anyhow::bail!("LLM returned {status}: {body}");
             }
             let parsed: serde_json::Value = serde_json::from_str(&body)?;
+
+            if let Some(u) = parsed.get("usage") {
+                let step = Usage {
+                    prompt_tokens: u["prompt_tokens"].as_u64().unwrap_or(0),
+                    completion_tokens: u["completion_tokens"].as_u64().unwrap_or(0),
+                    total_tokens: u["total_tokens"].as_u64().unwrap_or(0),
+                    reasoning_tokens: u["completion_tokens_details"]["reasoning_tokens"].as_u64(),
+                };
+                total_usage.accumulate(&step);
+            }
+
             let choice = &parsed["choices"][0];
             let finish_reason = choice["finish_reason"].as_str().unwrap_or("stop");
             let message = choice["message"].clone();
@@ -330,7 +362,7 @@ impl LlmClient {
                 }
             } else {
                 let text = message["content"].as_str().unwrap_or("").to_string();
-                return Ok((text, all_sources));
+                return Ok((text, all_sources, total_usage));
             }
         }
         anyhow::bail!("tool call loop exceeded maximum iterations")
@@ -341,7 +373,7 @@ impl LlmClient {
         history: &[(String, String)],
         system: &str,
         tool_fn: F,
-    ) -> anyhow::Result<(String, Vec<String>)>
+    ) -> anyhow::Result<(String, Vec<String>, Usage)>
     where
         F: Fn(String, serde_json::Value) -> Fut,
         Fut: Future<Output = anyhow::Result<(String, Vec<String>)>>,
@@ -381,6 +413,7 @@ impl LlmClient {
             .collect();
 
         let mut all_sources: Vec<String> = Vec::new();
+        let mut total_usage = Usage::default();
 
         for _ in 0..8 {
             let mut body = json!({
@@ -405,6 +438,19 @@ impl LlmClient {
                 anyhow::bail!("Anthropic returned {status}: {body}");
             }
             let parsed: serde_json::Value = serde_json::from_str(&body)?;
+
+            if let Some(u) = parsed.get("usage") {
+                let input = u["input_tokens"].as_u64().unwrap_or(0);
+                let output = u["output_tokens"].as_u64().unwrap_or(0);
+                let step = Usage {
+                    prompt_tokens: input,
+                    completion_tokens: output,
+                    total_tokens: input + output,
+                    reasoning_tokens: None,
+                };
+                total_usage.accumulate(&step);
+            }
+
             let stop_reason = parsed["stop_reason"].as_str().unwrap_or("end_turn");
             let content = parsed["content"].as_array().cloned().unwrap_or_default();
 
@@ -433,7 +479,7 @@ impl LlmClient {
                     .and_then(|b| b["text"].as_str())
                     .unwrap_or("")
                     .to_string();
-                return Ok((text, all_sources));
+                return Ok((text, all_sources, total_usage));
             }
         }
         anyhow::bail!("tool call loop exceeded maximum iterations")

@@ -3298,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "memoir"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -3326,7 +3326,7 @@ dependencies = [
 
 [[package]]
 name = "memoir-app"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "memoir",
  "serde_json",
