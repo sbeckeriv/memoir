@@ -180,6 +180,9 @@ pub struct LlmSettings {
     pub extra_params: Option<String>,
     /// Override model used for /chat (multi-turn). Falls back to `model` when unset.
     pub chat_model: Option<String>,
+    /// System prompt used for the final synthesis step of /api/digest.
+    /// Leave unset to use the built-in default digest prompt.
+    pub digest_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -312,6 +315,7 @@ impl Default for LlmSettings {
             system_prompt: None,
             extra_params: None,
             chat_model: None,
+            digest_prompt: None,
         }
     }
 }

@@ -88,6 +88,13 @@ pub struct WeeklyEntry {
     pub last_visit_at: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct DigestPage {
+    pub url: String,
+    pub title: String,
+    pub snippet: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct VectorResult {
     pub url: String,
@@ -122,6 +129,43 @@ pub struct FullExport {
     pub exported_at: String,
     pub pages: Vec<ExportPage>,
     pub ban_list: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ThreadSummary {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub page_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ThreadPageEntry {
+    pub url: String,
+    pub title: String,
+    pub snippet: String,
+    pub added_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DigestJob {
+    pub id: i64,
+    pub hours: u64,
+    pub status: String,
+    pub progress: Option<String>,
+    pub result_md: Option<String>,
+    pub result_html: Option<String>,
+    pub created_at: String,
+    pub finished_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DigestJobSummary {
+    pub id: i64,
+    pub hours: u64,
+    pub status: String,
+    pub created_at: String,
+    pub finished_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -183,7 +227,28 @@ impl IndexStore {
         let _ = conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS banned_hosts (host TEXT PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS cluster_ignored_domains (domain TEXT PRIMARY KEY);
-             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);",
+             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+             CREATE TABLE IF NOT EXISTS threads (
+                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                 name       TEXT NOT NULL UNIQUE,
+                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+             );
+             CREATE TABLE IF NOT EXISTS thread_pages (
+                 thread_id  INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+                 url        TEXT NOT NULL,
+                 added_at   TEXT NOT NULL DEFAULT (datetime('now')),
+                 PRIMARY KEY (thread_id, url)
+             );
+             CREATE TABLE IF NOT EXISTS digests (
+                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                 hours       INTEGER NOT NULL,
+                 status      TEXT NOT NULL DEFAULT 'running',
+                 progress    TEXT,
+                 result_md   TEXT,
+                 result_html TEXT,
+                 created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                 finished_at TEXT
+             );",
         );
         // Migrate from external-content FTS to standalone. External-content FTS
         // requires passing old column values on delete, which desynchronises under
@@ -665,6 +730,32 @@ impl IndexStore {
         Ok(rows)
     }
 
+    pub fn pages_since_hours(&self, hours: u64) -> Result<Vec<DigestPage>> {
+        let conn = Connection::open(&self.path)?;
+        let cutoff = (chrono::Utc::now() - chrono::Duration::hours(hours as i64))
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let mut stmt = conn.prepare(
+            "SELECT url, title, substr(body, 1, 300) as snippet
+             FROM pages
+             WHERE fetch_status = 'fetched'
+               AND last_visit_at >= ?1
+               AND body IS NOT NULL AND length(body) > 10
+             ORDER BY last_visit_at DESC",
+        )?;
+        let rows = stmt
+            .query_map([cutoff], |r| {
+                Ok(DigestPage {
+                    url: r.get(0)?,
+                    title: r.get(1)?,
+                    snippet: r.get(2)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
     pub fn autocomplete(&self, q: &str, limit: u32) -> Result<Vec<String>> {
         let conn = Connection::open(&self.path)?;
         let results = conn
@@ -1025,6 +1116,177 @@ impl IndexStore {
             .take(limit as usize)
             .map(|(url, title, score)| VectorResult { url, title, score })
             .collect())
+    }
+
+    pub fn list_threads(&self) -> Result<Vec<ThreadSummary>> {
+        let conn = Connection::open(&self.path)?;
+        let results = conn
+            .prepare(
+                "SELECT t.id, t.name, t.created_at, COUNT(tp.url) as page_count
+                 FROM threads t
+                 LEFT JOIN thread_pages tp ON tp.thread_id = t.id
+                 GROUP BY t.id
+                 ORDER BY t.created_at DESC",
+            )?
+            .query_map([], |r| {
+                Ok(ThreadSummary {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    created_at: r.get(2)?,
+                    page_count: r.get(3)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(results)
+    }
+
+    pub fn create_thread(&self, name: &str) -> Result<ThreadSummary> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute("INSERT INTO threads (name) VALUES (?1)", [name])?;
+        let id = conn.last_insert_rowid();
+        let thread = conn.query_row(
+            "SELECT id, name, created_at FROM threads WHERE id = ?1",
+            [id],
+            |r| {
+                Ok(ThreadSummary {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    created_at: r.get(2)?,
+                    page_count: 0,
+                })
+            },
+        )?;
+        Ok(thread)
+    }
+
+    pub fn delete_thread(&self, id: i64) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute("DELETE FROM threads WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub fn rename_thread(&self, id: i64, name: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "UPDATE threads SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn thread_pages(&self, thread_id: i64) -> Result<Vec<ThreadPageEntry>> {
+        let conn = Connection::open(&self.path)?;
+        let results = conn
+            .prepare(
+                "SELECT tp.url, COALESCE(p.title, tp.url) as title,
+                        COALESCE(substr(p.body, 1, 300), '') as snippet,
+                        tp.added_at
+                 FROM thread_pages tp
+                 LEFT JOIN pages p ON p.url = tp.url
+                 WHERE tp.thread_id = ?1
+                 ORDER BY tp.added_at DESC",
+            )?
+            .query_map([thread_id], |r| {
+                Ok(ThreadPageEntry {
+                    url: r.get(0)?,
+                    title: r.get(1)?,
+                    snippet: r.get(2)?,
+                    added_at: r.get(3)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(results)
+    }
+
+    pub fn add_thread_page(&self, thread_id: i64, url: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "INSERT OR IGNORE INTO thread_pages (thread_id, url) VALUES (?1, ?2)",
+            params![thread_id, url],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_thread_page(&self, thread_id: i64, url: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "DELETE FROM thread_pages WHERE thread_id = ?1 AND url = ?2",
+            params![thread_id, url],
+        )?;
+        Ok(())
+    }
+
+    pub fn create_digest_job(&self, hours: u64) -> Result<i64> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "INSERT INTO digests (hours) VALUES (?1)",
+            params![hours as i64],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn update_digest_job_progress(&self, id: i64, progress: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "UPDATE digests SET progress = ?1 WHERE id = ?2",
+            params![progress, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn finish_digest_job(&self, id: i64, md: &str, html: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "UPDATE digests SET status = 'done', result_md = ?1, result_html = ?2, finished_at = datetime('now') WHERE id = ?3",
+            params![md, html, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn fail_digest_job(&self, id: i64, error: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "UPDATE digests SET status = 'error', progress = ?1, finished_at = datetime('now') WHERE id = ?2",
+            params![error, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_digest_job(&self, id: i64) -> Result<Option<DigestJob>> {
+        let conn = Connection::open(&self.path)?;
+        conn.query_row(
+            "SELECT id, hours, status, progress, result_md, result_html, created_at, finished_at FROM digests WHERE id = ?1",
+            params![id],
+            |r| Ok(DigestJob {
+                id: r.get(0)?,
+                hours: r.get::<_, i64>(1)? as u64,
+                status: r.get(2)?,
+                progress: r.get(3)?,
+                result_md: r.get(4)?,
+                result_html: r.get(5)?,
+                created_at: r.get(6)?,
+                finished_at: r.get(7)?,
+            }),
+        ).optional().map_err(Into::into)
+    }
+
+    pub fn list_digest_jobs(&self, limit: u32) -> Result<Vec<DigestJobSummary>> {
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, hours, status, created_at, finished_at FROM digests ORDER BY id DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |r| {
+            Ok(DigestJobSummary {
+                id: r.get(0)?,
+                hours: r.get::<_, i64>(1)? as u64,
+                status: r.get(2)?,
+                created_at: r.get(3)?,
+                finished_at: r.get(4)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
     }
 }
 

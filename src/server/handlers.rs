@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{StatusCode, header},
     response::{Html, IntoResponse, Response},
 };
@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::browser::{self, HistoryItem};
 use crate::cluster::{self, Cluster};
-use crate::index::{IndexStore, PageEntry, SearchResult, Stats, WeeklyEntry};
+use crate::index::{DigestPage, IndexStore, PageEntry, SearchResult, Stats, WeeklyEntry};
 use crate::rag::AskResponse;
 use crate::session_log::LogKind;
 
@@ -1659,4 +1659,310 @@ pub async fn embed_status(State(state): State<AppState>) -> Json<String> {
 
 pub async fn update_available(State(state): State<AppState>) -> Json<Option<super::UpdateInfo>> {
     Json(state.update_available.lock().await.clone())
+}
+
+// --- Digest ---
+
+const DEFAULT_DIGEST_PROMPT: &str = "\
+You are Memoir, a personal browsing digest assistant.\n\
+The user has given you summaries of batches of web pages they visited recently.\n\
+Write a cohesive, insightful digest of their browsing activity.\n\
+Focus on:\n\
+- Main topics and themes\n\
+- Recurring interests or ongoing research\n\
+- Interesting connections between subjects\n\
+- Open questions or threads the user may still be exploring\n\
+Format your digest with clear sections using markdown. Be insightful but concise.";
+
+const BATCH_SUMMARIZE_PROMPT: &str = "\
+Summarize the key topics from these web pages a user visited. \
+For each page a title and short excerpt is provided. \
+Return 2–4 concise sentences covering the main themes. \
+Do not list each page individually — synthesize across them.";
+
+#[derive(Deserialize)]
+pub struct DigestBody {
+    #[serde(default = "default_digest_hours")]
+    pub hours: u64,
+}
+
+fn default_digest_hours() -> u64 {
+    24
+}
+
+pub async fn digest_page() -> impl IntoResponse {
+    Html(include_str!("../ui/digest.html"))
+}
+
+pub async fn digest(
+    State(state): State<AppState>,
+    Json(body): Json<DigestBody>,
+) -> impl IntoResponse {
+    let hours = body.hours;
+    let index = state.index.clone();
+
+    let job_id = match index.create_digest_job(hours) {
+        Ok(id) => id,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            );
+        }
+    };
+
+    let llm = state.llm.lock().ok().map(|g| (*g).clone());
+    let digest_prompt = state
+        .config
+        .read()
+        .ok()
+        .and_then(|c| c.llm.digest_prompt.clone());
+    let index2 = index.clone();
+
+    tokio::spawn(async move {
+        let set_progress = |msg: &str| {
+            let _ = index2.update_digest_job_progress(job_id, msg);
+        };
+        let fail = |msg: &str| {
+            let _ = index2.fail_digest_job(job_id, msg);
+        };
+
+        let llm = match llm {
+            Some(l) => l,
+            None => {
+                fail("LLM is not configured. Set up a provider in Settings.");
+                return;
+            }
+        };
+
+        let idx = index2.clone();
+        let pages: Vec<DigestPage> =
+            match tokio::task::spawn_blocking(move || idx.pages_since_hours(hours)).await {
+                Ok(Ok(p)) => p,
+                _ => {
+                    fail("Failed to read pages from index.");
+                    return;
+                }
+            };
+
+        if pages.is_empty() {
+            let label = hours_label(hours);
+            let html = format!("<p>No indexed pages found in the last {label}.</p>");
+            let md = format!("No indexed pages found in the last {label}.");
+            let _ = index2.finish_digest_job(job_id, &md, &html);
+            return;
+        }
+
+        let label = hours_label(hours);
+        set_progress(&format!(
+            "Found {} pages in the last {}…",
+            pages.len(),
+            label
+        ));
+
+        const BATCH: usize = 10;
+        let batches: Vec<&[DigestPage]> = pages.chunks(BATCH).collect();
+        let n_batches = batches.len();
+
+        let mut batch_summaries: Vec<String> = Vec::new();
+        for (i, batch) in batches.into_iter().enumerate() {
+            set_progress(&format!("Summarizing batch {} of {}…", i + 1, n_batches));
+
+            let mut prompt_parts = Vec::new();
+            for (j, p) in batch.iter().enumerate() {
+                let title = p.title.trim();
+                let snippet = p.snippet.trim().replace('\n', " ");
+                prompt_parts.push(format!(
+                    "[{}] Title: \"{}\" — Excerpt: \"{}\"",
+                    j + 1,
+                    title,
+                    snippet
+                ));
+            }
+            let batch_prompt = prompt_parts.join("\n");
+
+            match llm
+                .generate(&batch_prompt, Some(BATCH_SUMMARIZE_PROMPT))
+                .await
+            {
+                Ok(summary) => batch_summaries.push(summary),
+                Err(e) => {
+                    fail(&format!("Batch {} failed: {e}", i + 1));
+                    return;
+                }
+            }
+        }
+
+        set_progress("Writing digest…");
+
+        let synthesis_system = digest_prompt.as_deref().unwrap_or(DEFAULT_DIGEST_PROMPT);
+
+        let synthesis_body = format!(
+            "Browsing digest — last {} ({} pages total):\n\n{}",
+            label,
+            pages.len(),
+            batch_summaries
+                .iter()
+                .enumerate()
+                .map(|(i, s)| format!("**Batch {}:**\n{}", i + 1, s))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        );
+
+        match llm.generate(&synthesis_body, Some(synthesis_system)).await {
+            Ok(md) => {
+                let html = markdown_to_html(&md);
+                let _ = index2.finish_digest_job(job_id, &md, &html);
+            }
+            Err(e) => {
+                fail(&format!("Synthesis failed: {e}"));
+            }
+        }
+    });
+
+    (StatusCode::OK, Json(serde_json::json!({"id": job_id})))
+}
+
+pub async fn digest_status(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    match state.index.get_digest_job(id) {
+        Ok(Some(job)) => Json(serde_json::to_value(job).unwrap_or_default()).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "not found"})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn digest_history(State(state): State<AppState>) -> impl IntoResponse {
+    match state.index.list_digest_jobs(50) {
+        Ok(jobs) => Json(serde_json::to_value(jobs).unwrap_or_default()).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+fn hours_label(hours: u64) -> String {
+    match hours {
+        1 => "1 hour".to_string(),
+        24 => "24 hours".to_string(),
+        72 => "3 days".to_string(),
+        168 => "7 days".to_string(),
+        h if h % 24 == 0 => format!("{} days", h / 24),
+        h => format!("{h} hours"),
+    }
+}
+
+// ---- Thread handlers ----
+
+pub async fn list_threads(State(state): State<AppState>) -> impl IntoResponse {
+    match state.index.list_threads() {
+        Ok(threads) => Json(threads).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CreateThreadBody {
+    pub name: String,
+}
+
+pub async fn create_thread(
+    State(state): State<AppState>,
+    Json(body): Json<CreateThreadBody>,
+) -> impl IntoResponse {
+    let name = body.name.trim().to_string();
+    if name.is_empty() {
+        return (StatusCode::BAD_REQUEST, "name required").into_response();
+    }
+    match state.index.create_thread(&name) {
+        Ok(thread) => (StatusCode::CREATED, Json(thread)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn delete_thread(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    match state.index.delete_thread(id) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RenameThreadBody {
+    pub name: String,
+}
+
+pub async fn rename_thread(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(body): Json<RenameThreadBody>,
+) -> impl IntoResponse {
+    let name = body.name.trim().to_string();
+    if name.is_empty() {
+        return (StatusCode::BAD_REQUEST, "name required").into_response();
+    }
+    match state.index.rename_thread(id, &name) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn get_thread_pages(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    match state.index.thread_pages(id) {
+        Ok(pages) => Json(pages).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AddThreadPageBody {
+    pub url: String,
+}
+
+pub async fn add_thread_page(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(body): Json<AddThreadPageBody>,
+) -> impl IntoResponse {
+    if body.url.is_empty() {
+        return (StatusCode::BAD_REQUEST, "url required").into_response();
+    }
+    match state.index.add_thread_page(id, &body.url) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RemoveThreadPageBody {
+    pub url: String,
+}
+
+pub async fn remove_thread_page(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+    Json(body): Json<RemoveThreadPageBody>,
+) -> impl IntoResponse {
+    match state.index.remove_thread_page(id, &body.url) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
 }

@@ -149,6 +149,47 @@ header h1 a { display: block; }
 .btn:hover { opacity: 0.88; }
 .btn-search { background: #5b8af4; color: #fff; }
 .btn-ask    { background: #7c3aed; color: #fff; }
+.btn-digest { background: #0ea5a5; color: #fff; }
+
+.digest-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.digest-range-btn {
+  background: none;
+  border: 1px solid #d8d8de;
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: #555;
+  transition: background 0.12s, border-color 0.12s;
+}
+.digest-range-btn:hover { background: #f0f0f4; }
+.digest-range-btn.active { background: #e8f0ff; border-color: #5b8af4; color: #2a5ad4; font-weight: 600; }
+.digest-progress {
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+  color: #888;
+  font-style: italic;
+}
+.digest-result {
+  margin-top: 0.875rem;
+  line-height: 1.65;
+  font-size: 0.9rem;
+}
+.digest-result p { margin: 0 0 0.5rem; }
+.digest-result p:last-child { margin-bottom: 0; }
+.digest-result ul, .digest-result ol { padding-left: 1.25rem; margin: 0 0 0.5rem; }
+.digest-result li { margin-bottom: 0.2rem; }
+.digest-result h1, .digest-result h2, .digest-result h3 { font-size: 1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.digest-result code { font-family: ui-monospace, monospace; font-size: 0.85em; background: #f0f0f4; padding: 0.1em 0.35em; border-radius: 3px; }
+.digest-result pre { background: #f0f0f4; padding: 0.75rem; border-radius: 6px; overflow-x: auto; margin: 0 0 0.5rem; }
+.digest-result pre code { background: none; padding: 0; }
+.digest-result a { color: #0ea5a5; }
+.digest-result strong { font-weight: 600; }
 
 main {
   max-width: 1060px;
@@ -556,6 +597,105 @@ main {
 .confirm-ok { background: #ef4444; color: #fff; border: none; border-radius: 6px; padding: 0.45rem 1rem; font-size: 0.85rem; cursor: pointer; }
 .confirm-cancel:hover { background: #d5d5de; }
 .confirm-ok:hover { background: #dc2626; }
+
+/* Threads */
+.thread-picker-wrap { position: relative; display: inline-block; }
+.thread-popover {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12); z-index: 100;
+  min-width: 200px; max-width: 260px; padding: 0.5rem;
+  display: none; flex-direction: column; gap: 0.25rem;
+}
+.thread-popover.open { display: flex; }
+.thread-popover-item {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.5rem; border-radius: 5px; cursor: pointer;
+  font-size: 0.83rem; color: #333;
+}
+.thread-popover-item:hover { background: #f3f3f8; }
+.thread-popover-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.thread-popover-item .tpi-count { color: #aaa; font-size: 0.75rem; flex-shrink: 0; }
+.thread-popover-new {
+  display: flex; gap: 0.3rem; margin-top: 0.25rem; padding-top: 0.35rem;
+  border-top: 1px solid #f0f0f4;
+}
+.thread-popover-new input {
+  flex: 1; font-size: 0.82rem; border: 1px solid #ddd; border-radius: 5px;
+  padding: 0.28rem 0.45rem; outline: none;
+}
+.thread-popover-new input:focus { border-color: #5b8af4; }
+.thread-popover-new button {
+  font-size: 0.78rem; background: #5b8af4; color: #fff;
+  border: none; border-radius: 5px; padding: 0.28rem 0.55rem; cursor: pointer;
+}
+.thread-popover-new button:hover { background: #3b6ef0; }
+.thread-popover-empty { font-size: 0.8rem; color: #aaa; padding: 0.25rem 0.5rem; }
+
+.thread-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.thread-row {
+  border: 1px solid #e8e8ec; border-radius: 8px; overflow: hidden;
+}
+.thread-header {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.65rem 0.9rem; background: #fafafa;
+  cursor: pointer; user-select: none; transition: background 0.1s;
+}
+.thread-header:hover { background: #f3f3f7; }
+.thread-name {
+  font-size: 0.88rem; font-weight: 600; color: #1a1a1a; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.thread-name-input {
+  flex: 1; font-size: 0.88rem; font-weight: 600; border: 1px solid #5b8af4;
+  border-radius: 4px; padding: 0.1rem 0.4rem; outline: none;
+}
+.thread-count { font-size: 0.75rem; color: #999; flex-shrink: 0; }
+.thread-toggle { font-size: 0.72rem; color: #bbb; flex-shrink: 0; transition: transform 0.15s; }
+.thread-row.open .thread-toggle { transform: rotate(180deg); }
+.thread-body {
+  display: none; padding: 0.6rem 0.9rem 0.75rem; border-top: 1px solid #ebebef; background: #fff;
+}
+.thread-row.open .thread-body { display: block; }
+.thread-page-list { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.6rem; }
+.thread-page-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0; border-bottom: 1px solid #f5f5f8;
+}
+.thread-page-row:last-child { border-bottom: none; }
+.thread-page-link {
+  font-size: 0.84rem; color: #2563eb; text-decoration: none; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.thread-page-link:hover { text-decoration: underline; }
+.thread-page-remove {
+  font-size: 0.75rem; color: #ccc; background: none; border: none;
+  cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 3px; flex-shrink: 0;
+}
+.thread-page-remove:hover { color: #b91c1c; background: #fee2e2; }
+.thread-actions {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;
+  padding-top: 0.5rem; border-top: 1px solid #f0f0f3; align-items: center;
+}
+.thread-action-btn {
+  font-size: 0.76rem; background: none; border: 1px solid #e0e0e8;
+  border-radius: 5px; padding: 0.25rem 0.6rem; cursor: pointer; color: #666;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.thread-action-btn:hover { background: #f5f5f8; border-color: #c8c8d4; color: #333; }
+.thread-action-btn.danger:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+.thread-ask-q {
+  flex: 1; min-width: 120px; font-size: 0.82rem; border: 1px solid #ddd;
+  border-radius: 5px; padding: 0.25rem 0.5rem; outline: none;
+}
+.thread-ask-q:focus { border-color: #5b8af4; }
+.thread-ask-result {
+  margin-top: 0.75rem; padding-top: 0.6rem; border-top: 1px solid #f0f0f3;
+  font-size: 0.85rem; line-height: 1.6; color: #333;
+}
+.thread-ask-result p { margin: 0 0 0.4rem; }
+.thread-ask-result p:last-child { margin-bottom: 0; }
+.thread-empty { color: #aaa; font-size: 0.83rem; font-style: italic; }
 </style>
 <link rel="stylesheet" href="/api/custom-css">
 </head>
@@ -570,7 +710,7 @@ main {
     </div>
     <button class="btn btn-search" id="btn-search">Search</button>
   </div>
-  <span class="header-nav"><a href="/manage">Manage</a> · <a href="/chat">Chat</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
+  <span class="header-nav"><a href="/manage">Manage</a> · <a href="/chat">Chat</a> · <a href="/digest">Digest</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
   <div id="update-notice" class="update-notice">
     <span id="update-version"></span>
     · <a id="update-url" href="#" target="_blank">Release notes</a>
@@ -580,6 +720,12 @@ main {
 <div id="stats-bar" class="stats-bar"></div>
 
 <main>
+  <div class="card" id="threads-section" style="display:none">
+    <div class="card-title">Research Threads</div>
+    <div class="thread-list" id="thread-list"></div>
+    <div id="thread-empty" class="thread-empty" style="display:none">No threads yet — add pages from search results using the + button.</div>
+  </div>
+
   <div id="results-section" class="card">
     <div class="card-title" id="results-label">Search Results</div>
     <div class="search-row" style="margin-bottom:0.5rem">
@@ -605,22 +751,30 @@ main {
       <div class="site-list" id="starred-list"><span class="empty">Nothing starred yet — star pages in <a href="/manage">Manage</a>.</span></div>
     </div>
     <div class="card">
-      <div class="card-title">This Week</div>
+      <div class="card-title" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between" onclick="toggleWeekly(this)">
+        This Week
+        <span id="weekly-toggle" style="font-size:0.72rem;color:#bbb;transition:transform 0.15s">▾</span>
+      </div>
       <div id="weekly-list"><span class="empty">Loading…</span></div>
     </div>
   </div>
 
   <div class="card" id="clusters-section" style="display:none">
-    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.875rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.875rem;cursor:pointer;user-select:none" onclick="toggleClusters(this)">
       <span class="card-title" style="margin-bottom:0;flex-shrink:0">Browsing</span>
-      <button class="cluster-tab active" id="tab-sessions" onclick="switchClusterTab('sessions')">Sessions</button>
-      <button class="cluster-tab" id="tab-topics" onclick="switchClusterTab('topics')">Topics</button>
+      <button class="cluster-tab active" id="tab-sessions" onclick="event.stopPropagation();switchClusterTab('sessions')">Sessions</button>
+      <button class="cluster-tab" id="tab-topics" onclick="event.stopPropagation();switchClusterTab('topics')">Topics</button>
+      <span id="clusters-toggle" style="margin-left:auto;font-size:0.72rem;color:#bbb;transition:transform 0.15s;transform:rotate(-90deg)">▾</span>
     </div>
-    <div class="cluster-list" id="cluster-list"></div>
-    <div class="clusters-footer" id="clusters-footer" style="display:none">
-      <button onclick="showHiddenClusters()"></button>
+    <div id="clusters-body" style="display:none">
+      <div class="cluster-list" id="cluster-list"></div>
+      <div class="clusters-footer" id="clusters-footer" style="display:none">
+        <button onclick="showHiddenClusters()"></button>
+      </div>
     </div>
   </div>
+
+
 </main>
 
 <script>
@@ -643,7 +797,7 @@ askInput.addEventListener('input', () => syncClear(askInput, askClear));
 qClear.addEventListener('click', () => {
   qInput.value = '';
   syncClear(qInput, qClear);
-  document.getElementById('results-section').style.display = 'none';
+  exitSearchMode();
   qInput.focus();
 });
 
@@ -694,11 +848,10 @@ qInput.addEventListener('input', () => {
   clearTimeout(_liveTimer);
   const raw = qInput.value.trim();
   if (!raw) {
-    document.getElementById('results-section').style.display = 'none';
+    exitSearchMode();
     acClose();
     return;
   }
-  acFetch(raw);
   _liveTimer = setTimeout(() => doSearch(true), 300);
 });
 
@@ -772,7 +925,7 @@ qInput.addEventListener('keydown', e => {
   }
 });
 
-qInput.addEventListener('blur', () => setTimeout(acClose, 150));
+qInput.addEventListener('blur', () => setTimeout(acClose, 100));
 
 function esc(s) {
   return String(s ?? '')
@@ -789,7 +942,24 @@ function fmtDate(s) {
   } catch { return s; }
 }
 
+const _homeGrid = document.querySelector('.home-grid');
+
+function enterSearchMode() {
+  document.getElementById('threads-section').style.display = 'none';
+  document.getElementById('clusters-section').style.display = 'none';
+  if (_homeGrid) _homeGrid.style.display = 'none';
+}
+
+function exitSearchMode() {
+  if (_homeGrid) _homeGrid.style.display = '';
+  document.getElementById('results-section').style.display = 'none';
+  renderThreadsSection();
+  renderClusters();
+  if (_clusterTab === 'topics') renderTopicClusters();
+}
+
 function showResults(label) {
+  enterSearchMode();
   document.getElementById('results-section').style.display = 'block';
   document.getElementById('results-label').textContent = label;
   document.getElementById('results-body').innerHTML = '';
@@ -846,6 +1016,10 @@ function renderSearchItems(items) {
         <button class="icon-btn expand" title="View page content" onclick="toggleExpandBody(this)">▾</button>
         <a class="icon-btn" href="https://web.archive.org/web/*/${esc(i.url)}" target="_blank" rel="noopener" title="View on Wayback Machine">⏱</a>
         <button class="icon-btn ${starClass}" title="${i.starred ? 'Unstar' : 'Star'}" onclick="toggleResultStar(this)">${starChar}</button>
+        <div class="thread-picker-wrap">
+          <button class="icon-btn" title="Add to thread" onclick="openThreadPicker(this)">+</button>
+          <div class="thread-popover"></div>
+        </div>
         <button class="icon-btn del" title="Delete from index" onclick="deleteResult(this)">🗑</button>
       </div>
     </div>`;
@@ -893,6 +1067,7 @@ async function askWithSources(q, sources) {
 }
 
 async function doSearch(fromLive) {
+  acClose();
   const raw = qInput.value.trim();
   if (!raw) return;
   const isQuestion = !fromLive && raw.endsWith('?');
@@ -1087,7 +1262,7 @@ async function loadWeekly() {
           <a href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.snippet || p.url)}">${esc(p.title || p.url)}</a>
         </div>`
       ).join('');
-      return `<div class="weekly-group">
+      return `<div class="weekly-group collapsed">
         <div class="weekly-host" onclick="this.closest('.weekly-group').classList.toggle('collapsed')">${favicon}${esc(g.host)}${badge}<span class="weekly-toggle">&#9660;</span></div>
         <div class="weekly-pages">${pages}</div>
       </div>`;
@@ -1095,6 +1270,22 @@ async function loadWeekly() {
   } catch {
     el.innerHTML = '<span class="empty">Could not load.</span>';
   }
+}
+
+function toggleWeekly(titleEl) {
+  const list = document.getElementById('weekly-list');
+  const toggle = document.getElementById('weekly-toggle');
+  const hidden = list.style.display === 'none';
+  list.style.display = hidden ? '' : 'none';
+  toggle.style.transform = hidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+}
+
+function toggleClusters() {
+  const body = document.getElementById('clusters-body');
+  const toggle = document.getElementById('clusters-toggle');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  toggle.style.transform = hidden ? '' : 'rotate(-90deg)';
 }
 
 loadWeekly();
@@ -1262,10 +1453,10 @@ function renderTopicClusters() {
   const list = document.getElementById('cluster-list');
   if (!_topicClusters.length) {
     list.innerHTML = '<span class="empty">No topic clusters yet — needs embeddings enabled.</span>';
-    section.style.display = 'block'; return;
+  } else {
+    list.innerHTML = _topicClusters.map(renderCluster).join('');
   }
   section.style.display = 'block';
-  list.innerHTML = _topicClusters.map(renderCluster).join('');
 }
 
 function renderClusters() {
@@ -1278,8 +1469,8 @@ function renderClusters() {
   const section = document.getElementById('clusters-section');
   const list = document.getElementById('cluster-list');
   const footer = document.getElementById('clusters-footer');
-  section.style.display = 'block';
   list.innerHTML = visible.map(renderCluster).join('');
+  section.style.display = 'block';
 
   if (hiddenCount > 0) {
     footer.style.display = 'block';
@@ -1411,6 +1602,247 @@ function confirmDialog(msg) {
     cancelBtn.addEventListener('click', onCancel);
   });
 }
+
+// ---- Threads ----
+
+let _threads = [];
+
+async function loadThreads() {
+  try {
+    const r = await fetch('/api/threads');
+    _threads = await r.json();
+    renderThreadsSection();
+  } catch {}
+}
+
+function renderThreadsSection() {
+  const section = document.getElementById('threads-section');
+  const listEl = document.getElementById('thread-list');
+  const emptyEl = document.getElementById('thread-empty');
+  if (!_threads.length) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  emptyEl.style.display = 'none';
+  listEl.innerHTML = _threads.map(t => `
+    <div class="thread-row" id="thread-row-${t.id}" data-id="${t.id}">
+      <div class="thread-header" onclick="toggleThreadRow(${t.id})">
+        <span class="thread-name" id="thread-name-${t.id}">${esc(t.name)}</span>
+        <span class="thread-count">${t.page_count} page${t.page_count === 1 ? '' : 's'}</span>
+        <span class="thread-toggle">▾</span>
+      </div>
+      <div class="thread-body" id="thread-body-${t.id}">
+        <div class="thread-page-list" id="thread-pages-${t.id}"><span class="thread-empty">Loading…</span></div>
+        <div class="thread-actions">
+          <input class="thread-ask-q" id="thread-ask-q-${t.id}" type="text" placeholder="Ask about these pages…">
+          <button class="thread-action-btn" onclick="threadAsk(${t.id})">Ask</button>
+          <button class="thread-action-btn" onclick="startRenameThread(${t.id})">Rename</button>
+          <button class="thread-action-btn danger" onclick="deleteThread(${t.id})">Delete</button>
+        </div>
+        <div class="thread-ask-result" id="thread-ask-result-${t.id}" style="display:none"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleThreadRow(id) {
+  const row = document.getElementById(`thread-row-${id}`);
+  const wasOpen = row.classList.contains('open');
+  row.classList.toggle('open');
+  if (!wasOpen) loadThreadPages(id);
+}
+
+async function loadThreadPages(id) {
+  const listEl = document.getElementById(`thread-pages-${id}`);
+  try {
+    const r = await fetch(`/api/threads/${id}/pages`);
+    const pages = await r.json();
+    if (!pages.length) {
+      listEl.innerHTML = '<span class="thread-empty">No pages yet.</span>';
+      return;
+    }
+    listEl.innerHTML = pages.map(p => `
+      <div class="thread-page-row">
+        <a class="thread-page-link" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.url)}">${esc(p.title || p.url)}</a>
+        <button class="thread-page-remove" title="Remove" onclick="removeThreadPage(${id}, ${JSON.stringify(esc(p.url))}, this)">✕</button>
+      </div>
+    `).join('');
+  } catch {
+    listEl.innerHTML = '<span class="thread-empty">Failed to load pages.</span>';
+  }
+}
+
+async function removeThreadPage(threadId, url, btn) {
+  btn.disabled = true;
+  const decoded = url.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#039;/g,"'");
+  try {
+    await fetch(`/api/threads/${threadId}/pages/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: decoded }),
+    });
+    btn.closest('.thread-page-row').remove();
+    const t = _threads.find(x => x.id === threadId);
+    if (t && t.page_count > 0) { t.page_count--; }
+    const countEl = document.querySelector(`#thread-row-${threadId} .thread-count`);
+    if (countEl && t) countEl.textContent = `${t.page_count} page${t.page_count === 1 ? '' : 's'}`;
+  } catch { btn.disabled = false; }
+}
+
+async function deleteThread(id) {
+  if (!confirm('Delete this thread and all its pages?')) return;
+  try {
+    await fetch(`/api/threads/${id}`, { method: 'DELETE' });
+    _threads = _threads.filter(t => t.id !== id);
+    renderThreadsSection();
+  } catch {}
+}
+
+function startRenameThread(id) {
+  const nameEl = document.getElementById(`thread-name-${id}`);
+  const current = nameEl.textContent;
+  const input = document.createElement('input');
+  input.className = 'thread-name-input';
+  input.value = current;
+  input.onclick = e => e.stopPropagation();
+  input.onkeydown = async e => {
+    if (e.key === 'Enter') await commitRename(id, input);
+    if (e.key === 'Escape') { input.replaceWith(nameEl); }
+  };
+  input.onblur = () => commitRename(id, input);
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+async function commitRename(id, input) {
+  const name = input.value.trim();
+  if (!name) { loadThreads(); return; }
+  try {
+    await fetch(`/api/threads/${id}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const t = _threads.find(x => x.id === id);
+    if (t) t.name = name;
+    const nameEl = document.getElementById(`thread-name-${id}`);
+    if (nameEl) { nameEl.textContent = name; input.replaceWith(nameEl); }
+    else loadThreads();
+  } catch { loadThreads(); }
+}
+
+async function threadAsk(id) {
+  const qEl = document.getElementById(`thread-ask-q-${id}`);
+  const resultEl = document.getElementById(`thread-ask-result-${id}`);
+  const q = qEl.value.trim();
+  if (!q) return;
+  resultEl.style.display = '';
+  resultEl.textContent = 'Thinking…';
+  try {
+    const pagesR = await fetch(`/api/threads/${id}/pages`);
+    const pages = await pagesR.json();
+    const sources = pages.map(p => ({ url: p.url, title: p.title || p.url }));
+    const r = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q, sources }),
+    });
+    const data = await r.json();
+    resultEl.innerHTML = data.answer || '<em>No answer.</em>';
+  } catch {
+    resultEl.textContent = 'Failed to get answer.';
+  }
+}
+
+// Thread picker popover
+let _pickerUrl = null;
+let _openPickerEl = null;
+
+document.addEventListener('click', e => {
+  if (_openPickerEl && !_openPickerEl.contains(e.target)) closeAllPickers();
+});
+
+function closeAllPickers() {
+  document.querySelectorAll('.thread-popover.open').forEach(p => p.classList.remove('open'));
+  _openPickerEl = null;
+}
+
+async function openThreadPicker(btn) {
+  const wrap = btn.closest('.thread-picker-wrap');
+  const popover = wrap.querySelector('.thread-popover');
+  const row = btn.closest('.result-item');
+  _pickerUrl = row ? row.dataset.url : null;
+
+  if (popover.classList.contains('open')) { closeAllPickers(); return; }
+  closeAllPickers();
+
+  try {
+    const r = await fetch('/api/threads');
+    _threads = await r.json();
+  } catch {}
+
+  const items = _threads.map(t => `
+    <div class="thread-popover-item" onclick="addToThread(${t.id}, this)">
+      <span>${esc(t.name)}</span>
+      <span class="tpi-count">${t.page_count}</span>
+    </div>
+  `).join('') || '<div class="thread-popover-empty">No threads yet.</div>';
+
+  popover.innerHTML = `${items}
+    <div class="thread-popover-new">
+      <input type="text" placeholder="New thread…" id="picker-new-name" onclick="event.stopPropagation()">
+      <button onclick="createAndAddThread()">Add</button>
+    </div>`;
+
+  popover.classList.add('open');
+  _openPickerEl = wrap;
+  const inp = popover.querySelector('#picker-new-name');
+  if (inp) inp.onkeydown = e => { if (e.key === 'Enter') createAndAddThread(); };
+}
+
+async function addToThread(threadId, el) {
+  if (!_pickerUrl) return;
+  closeAllPickers();
+  try {
+    await fetch(`/api/threads/${threadId}/pages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: _pickerUrl }),
+    });
+    const t = _threads.find(x => x.id === threadId);
+    if (t) t.page_count++;
+    renderThreadsSection();
+  } catch {}
+}
+
+async function createAndAddThread() {
+  const inp = document.getElementById('picker-new-name');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) return;
+  closeAllPickers();
+  try {
+    const r = await fetch('/api/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const thread = await r.json();
+    _threads.unshift(thread);
+    if (_pickerUrl) {
+      await fetch(`/api/threads/${thread.id}/pages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: _pickerUrl }),
+      });
+      thread.page_count = 1;
+    }
+    renderThreadsSection();
+  } catch {}
+}
+
+loadThreads();
 </script>
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">

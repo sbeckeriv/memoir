@@ -211,6 +211,10 @@ fn build_router(state: AppState) -> Router {
         .route("/api/ask", get(handlers::ask_get).post(handlers::ask))
         .route("/chat", get(handlers::chat_page))
         .route("/api/chat", post(handlers::chat))
+        .route("/digest", get(handlers::digest_page))
+        .route("/api/digest", post(handlers::digest))
+        .route("/api/digest/status/{id}", get(handlers::digest_status))
+        .route("/api/digest/history", get(handlers::digest_history))
         .route("/api/stats", get(handlers::stats))
         .route("/api/favicon", get(handlers::favicon))
         .route("/api/pages", get(handlers::list_pages))
@@ -260,6 +264,20 @@ fn build_router(state: AppState) -> Router {
         .route("/api/update/restart", post(handlers::update_restart))
         .route("/api/embed/status", get(handlers::embed_status))
         .route("/mcp", post(handlers::mcp_http))
+        .route(
+            "/api/threads",
+            get(handlers::list_threads).post(handlers::create_thread),
+        )
+        .route("/api/threads/{id}", delete(handlers::delete_thread))
+        .route("/api/threads/{id}/rename", post(handlers::rename_thread))
+        .route(
+            "/api/threads/{id}/pages",
+            get(handlers::get_thread_pages).post(handlers::add_thread_page),
+        )
+        .route(
+            "/api/threads/{id}/pages/remove",
+            post(handlers::remove_thread_page),
+        )
         .layer(cors)
         .with_state(state)
 }

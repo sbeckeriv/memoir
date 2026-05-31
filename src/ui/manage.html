@@ -297,6 +297,39 @@ td {
 .sync-actions { display: flex; gap: 0.5rem; }
 .btn-pause  { background: #e8e8ee; color: #333; }
 .btn-sync   { background: #5b8af4; color: #fff; }
+
+.thread-picker-wrap { position: relative; display: inline-block; }
+.thread-popover {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12); z-index: 100;
+  min-width: 200px; max-width: 260px; padding: 0.5rem;
+  display: none; flex-direction: column; gap: 0.25rem;
+}
+.thread-popover.open { display: flex; }
+.thread-popover-item {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.5rem; border-radius: 5px; cursor: pointer;
+  font-size: 0.83rem; color: #333;
+}
+.thread-popover-item:hover { background: #f3f3f8; }
+.thread-popover-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.thread-popover-item .tpi-count { color: #aaa; font-size: 0.75rem; flex-shrink: 0; }
+.thread-popover-new {
+  display: flex; gap: 0.3rem; margin-top: 0.25rem; padding-top: 0.35rem;
+  border-top: 1px solid #f0f0f4;
+}
+.thread-popover-new input {
+  flex: 1; font-size: 0.82rem; border: 1px solid #ddd; border-radius: 5px;
+  padding: 0.28rem 0.45rem; outline: none;
+}
+.thread-popover-new input:focus { border-color: #5b8af4; }
+.thread-popover-new button {
+  font-size: 0.78rem; background: #5b8af4; color: #fff;
+  border: none; border-radius: 5px; padding: 0.28rem 0.55rem; cursor: pointer;
+}
+.thread-popover-new button:hover { background: #3b6ef0; }
+.thread-popover-empty { font-size: 0.8rem; color: #aaa; padding: 0.25rem 0.5rem; }
 </style>
 <link rel="stylesheet" href="/api/custom-css">
 </head>
@@ -462,6 +495,10 @@ async function load() {
           <div class="actions">
             <button class="icon-btn ${starClass}" title="${item.starred ? 'Unstar' : 'Star'}" onclick="toggleStar(this)">${star}</button>
             <button class="icon-btn reindex" title="Re-index this page" onclick="reindexPage(this)">↺</button>
+            <div class="thread-picker-wrap">
+              <button class="icon-btn" title="Add to thread" onclick="openThreadPicker(this)">+</button>
+              <div class="thread-popover"></div>
+            </div>
             <button class="icon-btn del" title="Delete this page" onclick="deletePage(this)">🗑</button>
             <button class="icon-btn del-host" title="Delete all ${esc(h)} pages (no ban)" onclick="deleteHost(this)">✕ ${esc(h)}</button>
             <button class="icon-btn ban-host" title="Ban host &amp; delete all its pages" onclick="banHost(this)">🚫 ${esc(h)}</button>
@@ -682,6 +719,89 @@ document.getElementById('import-file').addEventListener('change', async (e) => {
 
 load();
 loadSyncStatus();
+
+// ---- Thread picker for manage page ----
+
+let _manageThreads = [];
+let _pickerUrl = null;
+let _openPickerEl = null;
+
+document.addEventListener('click', e => {
+  if (_openPickerEl && !_openPickerEl.contains(e.target)) closeAllPickers();
+});
+
+function closeAllPickers() {
+  document.querySelectorAll('.thread-popover.open').forEach(p => p.classList.remove('open'));
+  _openPickerEl = null;
+}
+
+async function openThreadPicker(btn) {
+  const wrap = btn.closest('.thread-picker-wrap');
+  const popover = wrap.querySelector('.thread-popover');
+  const row = btn.closest('tr[data-url]');
+  _pickerUrl = row ? row.dataset.url : null;
+
+  if (popover.classList.contains('open')) { closeAllPickers(); return; }
+  closeAllPickers();
+
+  try {
+    const r = await fetch('/api/threads');
+    _manageThreads = await r.json();
+  } catch {}
+
+  const items = _manageThreads.map(t => `
+    <div class="thread-popover-item" onclick="addToThread(${t.id})">
+      <span>${esc(t.name)}</span>
+      <span class="tpi-count">${t.page_count}</span>
+    </div>
+  `).join('') || '<div class="thread-popover-empty">No threads yet.</div>';
+
+  popover.innerHTML = `${items}
+    <div class="thread-popover-new">
+      <input type="text" placeholder="New thread…" id="picker-new-name" onclick="event.stopPropagation()">
+      <button onclick="createAndAddThread()">Add</button>
+    </div>`;
+
+  popover.classList.add('open');
+  _openPickerEl = wrap;
+  const inp = popover.querySelector('#picker-new-name');
+  if (inp) inp.onkeydown = e => { if (e.key === 'Enter') createAndAddThread(); };
+}
+
+async function addToThread(threadId) {
+  if (!_pickerUrl) return;
+  closeAllPickers();
+  try {
+    await fetch(`/api/threads/${threadId}/pages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: _pickerUrl }),
+    });
+  } catch {}
+}
+
+async function createAndAddThread() {
+  const inp = document.getElementById('picker-new-name');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) return;
+  closeAllPickers();
+  try {
+    const r = await fetch('/api/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const thread = await r.json();
+    _manageThreads.unshift(thread);
+    if (_pickerUrl) {
+      await fetch(`/api/threads/${thread.id}/pages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: _pickerUrl }),
+      });
+    }
+  } catch {}
+}
 </script>
 </body>
 </html>

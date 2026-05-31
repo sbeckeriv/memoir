@@ -280,6 +280,10 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       <label for="system-prompt">System prompt <span class="hint">sent before every /ask query — current date is always prepended automatically</span></label>
       <textarea id="system-prompt" rows="10" placeholder="Leave blank to restore the built-in default."></textarea>
     </div>
+    <div class="field">
+      <label for="digest-prompt">Digest prompt <span class="hint">synthesis instructions for the Digest feature — leave blank to use the built-in default</span></label>
+      <textarea id="digest-prompt" rows="6" placeholder="Leave blank to restore the built-in default."></textarea>
+    </div>
   </div>
 
   <h2>Sync</h2>
@@ -400,6 +404,7 @@ async function load() {
   document.getElementById('max-context-chars').value = s.llm?.max_context_chars ?? '';
   document.getElementById('max-tokens').value = s.llm?.max_tokens ?? '';
   document.getElementById('system-prompt').value = s.llm?.system_prompt ?? '';
+  document.getElementById('digest-prompt').value = s.llm?.digest_prompt ?? '';
   document.getElementById('interval-mins').value = s.sync?.interval_mins ?? '';
   document.getElementById('fetch-batch').value = s.sync?.fetch_batch ?? '';
   document.getElementById('embed-batch').value = s.sync?.embed_batch ?? '';
@@ -454,6 +459,7 @@ async function save() {
       max_context_chars: parseInt(document.getElementById('max-context-chars').value, 10) || 8000,
       max_tokens: parseInt(document.getElementById('max-tokens').value, 10) || 2048,
       system_prompt: document.getElementById('system-prompt').value.trim() || null,
+      digest_prompt: document.getElementById('digest-prompt').value.trim() || null,
       ...(apiKey != null ? { api_key: apiKey } : {}),
     },
     sync: {
