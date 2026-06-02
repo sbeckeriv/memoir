@@ -200,13 +200,15 @@ pub fn run() {
                             }
                         });
 
-                        // Handle update-check requests from the web UI: download only.
+                        // Handle update-check requests from the web UI: download only,
+                        // or install+restart immediately if auto_update is enabled.
                         let update_requested = server.update_requested();
                         let update_status = server.update_status();
                         let update_log = server.log.clone();
                         let pending_check = pending_server.clone();
                         let restart_item_check = restart_item_server.clone();
                         let ah_restart = ah_for_server.clone();
+                        let update_config = server.state.config.clone();
                         tauri::async_runtime::spawn(async move {
                             use tauri_plugin_updater::UpdaterExt;
                             loop {
@@ -234,19 +236,45 @@ pub fn run() {
                                             }
                                             match update.download(|_, _| {}, || {}).await {
                                                 Ok(bytes) => {
-                                                    *pending_check.lock().await =
-                                                        Some((update, bytes));
-                                                    *update_status.lock().await =
-                                                        format!("downloaded:{ver}");
-                                                    update_log.push(
-                                                        memoir::LogKind::Sync,
-                                                        format!("Update v{ver} downloaded, restart to apply"),
-                                                        None,
-                                                    );
-                                                    if let Ok(guard) = restart_item_check.lock() {
-                                                        if let Some(item) = guard.as_ref() {
-                                                            let _ = item.set_enabled(true);
-                                                            let _ = item.set_text("Restart to Update");
+                                                    let auto_update = update_config
+                                                        .read()
+                                                        .map(|c| c.application.auto_update)
+                                                        .unwrap_or(false);
+                                                    if auto_update {
+                                                        *update_status.lock().await =
+                                                            format!("installing:{ver}");
+                                                        update_log.push(
+                                                            memoir::LogKind::Sync,
+                                                            format!("Applying update v{ver} and restarting"),
+                                                            None,
+                                                        );
+                                                        match update.install(bytes) {
+                                                            Ok(()) => ah_for_server.restart(),
+                                                            Err(e) => {
+                                                                update_log.push(
+                                                                    memoir::LogKind::Error,
+                                                                    "Update install failed",
+                                                                    e.to_string(),
+                                                                );
+                                                                *update_status.lock().await =
+                                                                    format!("error:{e}");
+                                                            }
+                                                        }
+                                                    } else {
+                                                        *pending_check.lock().await =
+                                                            Some((update, bytes));
+                                                        *update_status.lock().await =
+                                                            format!("downloaded:{ver}");
+                                                        update_log.push(
+                                                            memoir::LogKind::Sync,
+                                                            format!("Update v{ver} downloaded, restart to apply"),
+                                                            None,
+                                                        );
+                                                        if let Ok(guard) = restart_item_check.lock() {
+                                                            if let Some(item) = guard.as_ref() {
+                                                                let _ = item.set_enabled(true);
+                                                                let _ = item.set_text("Restart to Update");
+                                                            }
                                                         }
                                                     }
                                                 }
