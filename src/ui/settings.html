@@ -235,6 +235,10 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
       <label for="firecrawl-api-key">Firecrawl API key <span class="hint">optional — used as fallback for JS-heavy or auth-walled pages; leave blank to keep existing</span></label>
       <input id="firecrawl-api-key" type="password" placeholder="fc-…" autocomplete="off">
     </div>
+    <div class="field">
+      <label for="kagi-api-key">Kagi API key <span class="hint">optional — used as fallback after Firecrawl for auth-walled pages; leave blank to keep existing</span></label>
+      <input id="kagi-api-key" type="password" placeholder="your kagi API key" autocomplete="off">
+    </div>
   </div>
 
   <h2>LLM</h2>
@@ -371,6 +375,7 @@ textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, monosp
 <script>
 let originalApiKey = null;
 let originalFirecrawlKey = null;
+let originalKagiKey = null;
 
 async function load() {
   const r = await fetch('/api/settings');
@@ -400,6 +405,7 @@ async function load() {
   originalApiKey = s.llm?.api_key ?? null;
   document.getElementById('firecrawl-base-url').value = s.fetch?.firecrawl_base_url ?? '';
   originalFirecrawlKey = s.fetch?.firecrawl_api_key ?? null;
+  originalKagiKey = s.fetch?.kagi_api_key ?? null;
   // never pre-fill api key fields; user must re-enter to change them
   document.getElementById('max-context-chars').value = s.llm?.max_context_chars ?? '';
   document.getElementById('max-tokens').value = s.llm?.max_tokens ?? '';
@@ -424,6 +430,8 @@ async function save() {
   const apiKey = apiKeyField !== '' ? apiKeyField : originalApiKey;
   const firecrawlKeyField = document.getElementById('firecrawl-api-key').value.trim();
   const firecrawlKey = firecrawlKeyField !== '' ? firecrawlKeyField : originalFirecrawlKey;
+  const kagiKeyField = document.getElementById('kagi-api-key').value.trim();
+  const kagiKey = kagiKeyField !== '' ? kagiKeyField : originalKagiKey;
 
   const settings = {
     application: {
@@ -450,6 +458,7 @@ async function save() {
       ban,
       firecrawl_base_url: document.getElementById('firecrawl-base-url').value.trim() || 'https://api.firecrawl.dev',
       ...(firecrawlKey != null ? { firecrawl_api_key: firecrawlKey } : {}),
+      ...(kagiKey != null ? { kagi_api_key: kagiKey } : {}),
     },
     llm: {
       provider: document.getElementById('llm-provider').value,
@@ -485,6 +494,8 @@ async function save() {
     document.getElementById('llm-api-key').value = '';
     originalFirecrawlKey = firecrawlKey;
     document.getElementById('firecrawl-api-key').value = '';
+    originalKagiKey = kagiKey;
+    document.getElementById('kagi-api-key').value = '';
     showToast('Saved');
   } else {
     showToast('Save failed', true);

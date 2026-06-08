@@ -7,12 +7,13 @@ use serde::Deserialize;
 use tracing::{debug, warn};
 
 use crate::config::FetchSettings;
-use extract::{ExtractedPage, extract, is_auth_wall};
+use extract::{ExtractedPage, extract, is_auth_wall, is_paywall};
 
 #[derive(Debug)]
 pub enum FetchResult {
     Ok(ExtractedPage),
     AuthWall,
+    Paywall,
     Skip,
     Error(String),
 }
@@ -22,6 +23,17 @@ pub struct Fetcher {
     delay: Duration,
     firecrawl_api_key: Option<String>,
     firecrawl_base_url: String,
+    kagi_api_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct KagiExtractResponse {
+    data: Option<Vec<KagiPageOutput>>,
+}
+
+#[derive(Deserialize)]
+struct KagiPageOutput {
+    markdown: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -52,6 +64,7 @@ impl Fetcher {
             delay: Duration::from_millis(settings.delay_ms),
             firecrawl_api_key: settings.firecrawl_api_key.clone(),
             firecrawl_base_url: settings.firecrawl_base_url.clone(),
+            kagi_api_key: settings.kagi_api_key.clone(),
         })
     }
 
@@ -112,17 +125,24 @@ impl Fetcher {
             Ok(t) => t,
             Err(e) => return FetchResult::Error(e.to_string()),
         };
-        if !is_auth_wall(&final_url, &html) {
+        if is_auth_wall(&final_url, &html) {
+            // Login wall: personal/private content — no fallback can help.
+            return FetchResult::AuthWall;
+        }
+        if !is_paywall(&html) {
             return FetchResult::Ok(extract(&html));
         }
-        // Auth wall — try Firecrawl (if configured), then Wayback Machine.
+        // Paywall — try Firecrawl → Kagi → Wayback Machine for a cached copy.
         if let Some(page) = self.fetch_firecrawl(url).await {
+            return FetchResult::Ok(page);
+        }
+        if let Some(page) = self.fetch_kagi(url).await {
             return FetchResult::Ok(page);
         }
         if let Some(page) = self.fetch_wayback(url).await {
             return FetchResult::Ok(page);
         }
-        FetchResult::AuthWall
+        FetchResult::Paywall
     }
 
     async fn fetch_firecrawl(&self, url: &str) -> Option<ExtractedPage> {
@@ -170,6 +190,52 @@ impl Fetcher {
         let title = data.metadata.and_then(|m| m.title).unwrap_or_default();
         debug!(%url, "firecrawl extracted successfully");
         Some(ExtractedPage { title, body })
+    }
+
+    async fn fetch_kagi(&self, url: &str) -> Option<ExtractedPage> {
+        let api_key = self.kagi_api_key.as_deref()?;
+        debug!(%url, "trying Kagi extract");
+        let resp = match self
+            .client
+            .post("https://kagi.com/api/v1/extract")
+            .bearer_auth(api_key)
+            .json(&serde_json::json!({ "pages": [{"url": url}] }))
+            .send()
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(%url, error = %e, "kagi extract request failed");
+                return None;
+            }
+        };
+        if !resp.status().is_success() {
+            warn!(%url, status = %resp.status(), "kagi extract returned error status");
+            return None;
+        }
+        let kr: KagiExtractResponse = match resp.json().await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(%url, error = %e, "kagi extract response parse failed");
+                return None;
+            }
+        };
+        let body = kr
+            .data
+            .unwrap_or_default()
+            .into_iter()
+            .next()
+            .and_then(|p| p.markdown)
+            .unwrap_or_default();
+        if body.is_empty() {
+            warn!(%url, "kagi extract returned empty markdown");
+            return None;
+        }
+        debug!(%url, "kagi extract succeeded");
+        Some(ExtractedPage {
+            title: String::new(),
+            body,
+        })
     }
 
     async fn fetch_wayback(&self, url: &str) -> Option<ExtractedPage> {

@@ -211,6 +211,19 @@ pub async fn run(
                     None,
                 );
             }
+            FetchResult::Paywall => {
+                let index = index.clone();
+                let url2 = url.clone();
+                tokio::task::spawn_blocking(move || index.mark_status(&url2, FetchStatus::Paywall))
+                    .await??;
+                warn!(%url, "paywall, skipping");
+                slog(
+                    &log,
+                    LogKind::Sync,
+                    format!("Skipped (paywall): {url}"),
+                    None,
+                );
+            }
             FetchResult::Skip => {
                 let index = index.clone();
                 let url2 = url.clone();

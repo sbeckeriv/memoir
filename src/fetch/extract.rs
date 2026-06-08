@@ -52,7 +52,8 @@ fn extract_body(doc: &Html) -> String {
     String::new()
 }
 
-/// Detects login walls by final URL path and presence of a password input.
+/// Detects login walls: redirected to a login URL or page contains a password field.
+/// These are personal/private pages (email, Slack) — fallbacks can't help.
 pub fn is_auth_wall(final_url: &str, html: &str) -> bool {
     let url_lower = final_url.to_lowercase();
     if ["/login", "/signin", "/sign-in", "/auth/", "/authenticate"]
@@ -63,6 +64,54 @@ pub fn is_auth_wall(final_url: &str, html: &str) -> bool {
     }
     let html_lower = html.to_lowercase();
     html_lower.contains("type=\"password\"") || html_lower.contains("type='password'")
+}
+
+/// Detects paywalls: content exists but is gated behind a subscription.
+/// Unlike auth walls, archived/cached copies may be available via fallbacks.
+pub fn is_paywall(html: &str) -> bool {
+    let lower = html.to_lowercase();
+    // JSON-LD accessibility marker used by news sites
+    if lower.contains("\"isaccessibleforfree\":\"false\"")
+        || lower.contains("\"isaccessibleforfree\": \"false\"")
+    {
+        return true;
+    }
+    // Paywall overlay element class/id
+    if [
+        "class=\"paywall\"",
+        "id=\"paywall\"",
+        "class='paywall'",
+        "id='paywall'",
+        "data-paywall",
+        "class=\"tp-",
+        "id=\"tp-",
+    ]
+    .iter()
+    .any(|p| lower.contains(p))
+    {
+        return true;
+    }
+    // Common subscribe-to-read phrases
+    [
+        "subscribe to read",
+        "subscribe to continue",
+        "subscribe to keep reading",
+        "subscription required",
+        "subscriber-only",
+        "subscribers only",
+        "already a subscriber?",
+        "become a subscriber",
+        "premium article",
+        "premium content",
+        "members only",
+        "sign up to read",
+        "register to read",
+        "reading limit reached",
+        "free articles remaining",
+        "free article",
+    ]
+    .iter()
+    .any(|p| lower.contains(p))
 }
 
 #[cfg(test)]

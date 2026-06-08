@@ -159,6 +159,7 @@ pub struct FetchSettings {
     pub max_retries: u32,
     pub firecrawl_api_key: Option<String>,
     pub firecrawl_base_url: String,
+    pub kagi_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -259,6 +260,7 @@ impl Default for FetchSettings {
             max_retries: 3,
             firecrawl_api_key: None,
             firecrawl_base_url: "https://api.firecrawl.dev".to_string(),
+            kagi_api_key: None,
         }
     }
 }

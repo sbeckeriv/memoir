@@ -12,6 +12,7 @@ pub enum FetchStatus {
     Pending,
     Fetched,
     AuthWall,
+    Paywall,
     Skip,
     Error,
 }
@@ -22,6 +23,7 @@ impl FetchStatus {
             Self::Pending => "pending",
             Self::Fetched => "fetched",
             Self::AuthWall => "auth_wall",
+            Self::Paywall => "paywall",
             Self::Skip => "skip",
             Self::Error => "error",
         }
@@ -41,6 +43,7 @@ impl rusqlite::types::FromSql for FetchStatus {
             "pending" => Ok(Self::Pending),
             "fetched" => Ok(Self::Fetched),
             "auth_wall" => Ok(Self::AuthWall),
+            "paywall" => Ok(Self::Paywall),
             "skip" => Ok(Self::Skip),
             "error" => Ok(Self::Error),
             other => Err(rusqlite::types::FromSqlError::Other(
