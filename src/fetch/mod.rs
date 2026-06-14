@@ -1,4 +1,5 @@
 pub mod extract;
+pub mod recipe;
 
 use std::time::Duration;
 
@@ -130,7 +131,9 @@ impl Fetcher {
             return FetchResult::AuthWall;
         }
         if !is_paywall(&html) {
-            return FetchResult::Ok(extract(&html));
+            let mut page = extract(&html);
+            page.recipe = recipe::extract_recipe_schema(&html);
+            return FetchResult::Ok(page);
         }
         // Paywall — try Firecrawl → Kagi → Wayback Machine for a cached copy.
         if let Some(page) = self.fetch_firecrawl(url).await {
@@ -189,7 +192,11 @@ impl Fetcher {
         }
         let title = data.metadata.and_then(|m| m.title).unwrap_or_default();
         debug!(%url, "firecrawl extracted successfully");
-        Some(ExtractedPage { title, body })
+        Some(ExtractedPage {
+            title,
+            body,
+            recipe: None,
+        })
     }
 
     async fn fetch_kagi(&self, url: &str) -> Option<ExtractedPage> {
@@ -235,6 +242,7 @@ impl Fetcher {
         Some(ExtractedPage {
             title: String::new(),
             body,
+            recipe: None,
         })
     }
 

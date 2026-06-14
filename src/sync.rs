@@ -6,9 +6,11 @@ use tracing::{debug, info, warn};
 use crate::browser;
 use crate::config::{self, Settings};
 use crate::embed::EmbedText;
+use crate::fetch::recipe::{looks_like_recipe, parse_llm_recipe, recipe_extract_prompt, url_host};
 use crate::fetch::{FetchResult, Fetcher};
 use crate::index::store::IndexError;
 use crate::index::{FetchStatus, IndexStore};
+use crate::rag::LlmClient;
 use crate::session_log::{LogKind, SessionLog};
 
 const BROWSER_HISTORY_FETCH_LIMIT: u32 = 1000;
@@ -145,6 +147,24 @@ pub async fn run(
         tokio::task::spawn_blocking(move || index.urls_needing_fetch(fetch_batch)).await??
     };
 
+    // Build set of hosts to skip for recipe detection (many pages, zero recipes).
+    let recipe_skip = match tokio::task::spawn_blocking({
+        let idx = index.clone();
+        move || idx.recipe_skip_hosts(15)
+    })
+    .await
+    {
+        Ok(Ok(skip)) => skip,
+        Ok(Err(e)) => {
+            warn!(error = %e, "failed to build recipe skip list");
+            Default::default()
+        }
+        Err(e) => {
+            warn!(error = %e, "recipe skip task panicked");
+            Default::default()
+        }
+    };
+
     info!("syncing {} URLs", urls.len());
     if urls.is_empty() {
         slog(&log, LogKind::Sync, "No pages to fetch", None);
@@ -169,12 +189,57 @@ pub async fn run(
         debug!(%url, "fetching");
         match fetcher.fetch(&url).await {
             FetchResult::Ok(page) => {
+                let recipe = page.recipe.clone();
+                let title = page.title.clone();
+                let body = page.body.clone();
                 let idx = index.clone();
                 let url2 = url.clone();
                 tokio::task::spawn_blocking(move || {
                     idx.upsert_page(&url2, &page.title, &page.body)
                 })
                 .await??;
+
+                // Recipe handling
+                let host_skip = url_host(&url)
+                    .map(|h| recipe_skip.contains(h))
+                    .unwrap_or(false);
+                if !host_skip {
+                    if let Some(card) = recipe {
+                        // Schema.org recipe found — store immediately.
+                        let idx = index.clone();
+                        let url2 = url.clone();
+                        if let Err(e) = tokio::task::spawn_blocking(move || {
+                            idx.store_recipe(&url2, &card, "schema")
+                        })
+                        .await
+                        {
+                            warn!(%url, error = %e, "failed to store schema recipe");
+                        } else {
+                            info!(%url, "recipe stored from schema");
+                        }
+                    } else if looks_like_recipe(&title, &body) {
+                        // Heuristic match — queue for LLM extraction.
+                        let idx = index.clone();
+                        let url2 = url.clone();
+                        if let Err(e) = tokio::task::spawn_blocking(move || {
+                            idx.set_recipe_status(&url2, "pending")
+                        })
+                        .await
+                        {
+                            warn!(%url, error = %e, "failed to set recipe_status=pending");
+                        }
+                    } else {
+                        let idx = index.clone();
+                        let url2 = url.clone();
+                        if let Err(e) = tokio::task::spawn_blocking(move || {
+                            idx.set_recipe_status(&url2, "none")
+                        })
+                        .await
+                        {
+                            warn!(%url, error = %e, "failed to set recipe_status=none");
+                        }
+                    }
+                }
 
                 // Fetch and store favicon if we don't have one for this host yet.
                 let host = config::host_from_url(&url).to_string();
@@ -315,6 +380,95 @@ pub async fn run(
             "Semantic indexing skipped (no embedding model)",
             None,
         );
+    }
+
+    // LLM recipe extraction pass — process up to 20 pending pages per cycle.
+    let pending_recipes = match tokio::task::spawn_blocking({
+        let idx = index.clone();
+        move || idx.pages_needing_recipe_llm(20)
+    })
+    .await
+    {
+        Ok(Ok(pages)) => pages,
+        Ok(Err(e)) => {
+            warn!(error = %e, "failed to query pending recipe pages");
+            vec![]
+        }
+        Err(e) => {
+            warn!(error = %e, "recipe query task panicked");
+            vec![]
+        }
+    };
+    if !pending_recipes.is_empty() {
+        slog(
+            &log,
+            LogKind::Sync,
+            format!(
+                "Extracting recipes from {} page(s) via LLM",
+                pending_recipes.len()
+            ),
+            None,
+        );
+        let llm = LlmClient::new(&config.llm);
+        for (url, title, body) in pending_recipes {
+            let prompt = recipe_extract_prompt(&title, &body);
+            match llm.generate(&prompt, None).await {
+                Ok(response) => {
+                    if let Some(card) = parse_llm_recipe(&response) {
+                        let recipe_name = card.name.clone();
+                        let idx = index.clone();
+                        let url2 = url.clone();
+                        match tokio::task::spawn_blocking(move || {
+                            idx.store_recipe(&url2, &card, "llm")
+                        })
+                        .await
+                        {
+                            Ok(Ok(())) => {
+                                info!(%url, "recipe extracted via LLM");
+                                slog(
+                                    &log,
+                                    LogKind::Sync,
+                                    format!("Recipe found: {recipe_name}"),
+                                    Some(url.clone()),
+                                );
+                            }
+                            Ok(Err(e)) => warn!(%url, error = %e, "failed to store LLM recipe"),
+                            Err(e) => warn!(%url, error = %e, "store_recipe task panicked"),
+                        }
+                    } else {
+                        let idx = index.clone();
+                        let url2 = url.clone();
+                        match tokio::task::spawn_blocking(move || {
+                            idx.set_recipe_status(&url2, "none")
+                        })
+                        .await
+                        {
+                            Ok(Ok(())) => {
+                                slog(
+                                    &log,
+                                    LogKind::Sync,
+                                    "Recipe check: no recipe found".to_string(),
+                                    Some(url.clone()),
+                                );
+                            }
+                            Ok(Err(e)) => {
+                                warn!(%url, error = %e, "failed to set recipe_status=none")
+                            }
+                            Err(e) => warn!(%url, error = %e, "set_recipe_status task panicked"),
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(%url, error = %e, "LLM recipe extraction failed");
+                    slog(
+                        &log,
+                        LogKind::Error,
+                        format!("Recipe extraction error: {url}"),
+                        Some(e.to_string()),
+                    );
+                }
+            }
+        }
     }
 
     slog(&log, LogKind::Sync, "Sync complete", None);

@@ -25,6 +25,8 @@ header {
   align-items: center;
   gap: 1.25rem;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
   z-index: 10;
 }
 
@@ -269,12 +271,7 @@ header h1 a { display: block; }
 
 <header>
   <h1><a href="/"><img class="app-icon" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b8af4'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white'%3Em%3C/text%3E%3C/svg%3E" alt="memoir"></a></h1>
-  <span class="header-nav">
-    <a href="/">Home</a> ·
-    <a href="/manage">Manage</a> ·
-    <a href="/log">Log</a> ·
-    <span class="header-nav-current">Chat</span>
-  </span>
+  <span class="header-nav" id="main-nav"></span><script>!function(){var N=[['/','Search'],['/manage','Manage'],['/recipes','Recipes'],['/chat','Chat'],['/digest','Digest'],['/settings','Settings'],['/log','Activity']],p=location.pathname;document.getElementById('main-nav').innerHTML=N.map(function(l){var on=l[0]==='/'?p===l[0]:(p===l[0]||p.startsWith(l[0]+'/'));return on?'<span class="header-nav-current">'+l[1]+'</span>':'<a href="'+l[0]+'">'+l[1]+'</a>';}).join(' \xb7 ');}();</script>
   <div class="header-actions">
     <button class="btn-new" id="btn-new">New chat</button>
   </div>

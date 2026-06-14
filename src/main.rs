@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use clap::{Parser, Subcommand};
-use memoir::{Application, EmbedText, Embedder, Settings, config::LlmProvider};
+use memoir::{Application, EmbedText, Embedder, Settings};
 #[cfg(not(target_os = "windows"))]
 use skim::prelude::*;
 
@@ -122,7 +122,7 @@ fn run_pick(config: &Settings, query: Option<String>) -> anyhow::Result<()> {
 }
 
 async fn load_embedder(config: &Settings) -> Option<Arc<dyn EmbedText>> {
-    if !config.embed.enabled || config.llm.provider == LlmProvider::Disabled {
+    if !config.embed.enabled {
         return None;
     }
     let cache = Settings::config_dir().join("models");

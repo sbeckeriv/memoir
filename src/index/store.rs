@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -72,6 +73,21 @@ pub struct SearchResult {
     pub first_visit_at: Option<String>,
     pub last_visit_at: Option<String>,
     pub starred: bool,
+    pub has_recipe: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredRecipe {
+    pub url: String,
+    pub name: String,
+    pub ingredients: Vec<String>,
+    pub instructions: Vec<String>,
+    pub prep_time: Option<String>,
+    pub cook_time: Option<String>,
+    pub servings: Option<String>,
+    pub image_url: Option<String>,
+    pub extracted_by: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -227,6 +243,21 @@ impl IndexStore {
             [],
         );
         let _ = conn.execute("ALTER TABLE pages ADD COLUMN first_visit_at TIMESTAMP", []);
+        let _ = conn.execute("ALTER TABLE pages ADD COLUMN recipe_status TEXT", []);
+        let _ = conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS recipes (
+                url          TEXT PRIMARY KEY,
+                name         TEXT NOT NULL DEFAULT '',
+                ingredients  TEXT NOT NULL DEFAULT '[]',
+                instructions TEXT NOT NULL DEFAULT '[]',
+                prep_time    TEXT,
+                cook_time    TEXT,
+                servings     TEXT,
+                image_url    TEXT,
+                extracted_by TEXT NOT NULL DEFAULT 'schema',
+                created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+             );",
+        );
         let _ = conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS banned_hosts (host TEXT PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS cluster_ignored_domains (domain TEXT PRIMARY KEY);
@@ -904,9 +935,11 @@ impl IndexStore {
                 "SELECT p.url, p.title,
                         snippet(pages_fts, 1, '<b>', '</b>', '...', 20),
                         bm25(pages_fts),
-                        p.first_visit_at, p.last_visit_at, p.starred
+                        p.first_visit_at, p.last_visit_at, p.starred,
+                        CASE WHEN r.url IS NOT NULL THEN 1 ELSE 0 END
                  FROM pages_fts
                  JOIN pages p ON p.id = pages_fts.rowid
+                 LEFT JOIN recipes r ON r.url = p.url
                  WHERE pages_fts MATCH ?1
                  ORDER BY bm25(pages_fts)
                  LIMIT ?2",
@@ -920,6 +953,7 @@ impl IndexStore {
                     first_visit_at: row.get(4)?,
                     last_visit_at: row.get(5)?,
                     starred: row.get::<_, i32>(6)? != 0,
+                    has_recipe: row.get::<_, i32>(7)? != 0,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -927,16 +961,17 @@ impl IndexStore {
 
         // URL substring match — catches pages found via URL slug (e.g. "aerocano"
         // in the path) that may not have the word in indexed body text.
-        let seen: std::collections::HashSet<String> =
-            fts_results.iter().map(|r| r.url.clone()).collect();
+        let seen: HashSet<String> = fts_results.iter().map(|r| r.url.clone()).collect();
         let remaining = limit.saturating_sub(fts_results.len() as u32);
         if remaining > 0 {
             let url_hits: Vec<SearchResult> = conn
                 .prepare(
-                    "SELECT url, COALESCE(NULLIF(title,''), url), '', 0.0,
-                            first_visit_at, last_visit_at, starred
-                     FROM pages
-                     WHERE instr(url, ?1) > 0
+                    "SELECT p.url, COALESCE(NULLIF(p.title,''), p.url), '', 0.0,
+                            p.first_visit_at, p.last_visit_at, p.starred,
+                            CASE WHEN r.url IS NOT NULL THEN 1 ELSE 0 END
+                     FROM pages p
+                     LEFT JOIN recipes r ON r.url = p.url
+                     WHERE instr(p.url, ?1) > 0
                      LIMIT ?2",
                 )?
                 .query_map(params![query, remaining], |row| {
@@ -948,6 +983,7 @@ impl IndexStore {
                         first_visit_at: row.get(4)?,
                         last_visit_at: row.get(5)?,
                         starred: row.get::<_, i32>(6)? != 0,
+                        has_recipe: row.get::<_, i32>(7)? != 0,
                     })
                 })?
                 .filter_map(|r| r.ok())
@@ -1053,8 +1089,11 @@ impl IndexStore {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT url, COALESCE(NULLIF(title,''), url), first_visit_at, last_visit_at, starred
-             FROM pages WHERE url IN ({placeholders})"
+            "SELECT p.url, COALESCE(NULLIF(p.title,''), p.url), p.first_visit_at, p.last_visit_at, p.starred,
+                    CASE WHEN r.url IS NOT NULL THEN 1 ELSE 0 END
+             FROM pages p
+             LEFT JOIN recipes r ON r.url = p.url
+             WHERE p.url IN ({placeholders})"
         );
         let mut stmt = conn.prepare(&sql)?;
         let params: Vec<&dyn rusqlite::ToSql> =
@@ -1069,11 +1108,273 @@ impl IndexStore {
                     first_visit_at: row.get(2)?,
                     last_visit_at: row.get(3)?,
                     starred: row.get::<_, i32>(4)? != 0,
+                    has_recipe: row.get::<_, i32>(5)? != 0,
                 })
             })?
             .filter_map(|r| r.ok())
             .collect();
         Ok(rows)
+    }
+
+    pub fn store_recipe(
+        &self,
+        url: &str,
+        card: &crate::recipe::RecipeCard,
+        extracted_by: &str,
+    ) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        let ingredients = serde_json::to_string(&card.ingredients).unwrap_or_default();
+        let instructions = serde_json::to_string(&card.instructions).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO recipes (url, name, ingredients, instructions, prep_time, cook_time, servings, image_url, extracted_by)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(url) DO UPDATE SET
+               name=excluded.name, ingredients=excluded.ingredients,
+               instructions=excluded.instructions, prep_time=excluded.prep_time,
+               cook_time=excluded.cook_time, servings=excluded.servings,
+               image_url=excluded.image_url, extracted_by=excluded.extracted_by",
+            params![
+                url, card.name, ingredients, instructions,
+                card.prep_time, card.cook_time, card.servings, card.image_url,
+                extracted_by
+            ],
+        )?;
+        conn.execute(
+            "UPDATE pages SET recipe_status='recipe' WHERE url=?1",
+            params![url],
+        )?;
+        Ok(())
+    }
+
+    /// Marks all fetched pages for the given host as pending so they get re-fetched
+    /// on the next sync. Matches both `://host/` and `://www.host/` URLs.
+    /// Returns the number of pages queued.
+    pub fn requeue_host_for_refetch(&self, host: &str) -> Result<u64> {
+        let conn = Connection::open(&self.path)?;
+        let p1 = format!("://{}/", host);
+        let p2 = format!("://www.{}/", host);
+        let n = conn.execute(
+            "UPDATE pages SET fetch_status='pending'
+             WHERE (instr(url, ?1) > 0 OR instr(url, ?2) > 0)
+               AND fetch_status='fetched'",
+            params![p1, p2],
+        )?;
+        Ok(n as u64)
+    }
+
+    pub fn set_recipe_status(&self, url: &str, status: &str) -> Result<()> {
+        let conn = Connection::open(&self.path)?;
+        conn.execute(
+            "UPDATE pages SET recipe_status=?1 WHERE url=?2",
+            params![status, url],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_recipe(&self, url: &str) -> Result<Option<StoredRecipe>> {
+        let conn = Connection::open(&self.path)?;
+        let result = conn.query_row(
+            "SELECT url, name, ingredients, instructions, prep_time, cook_time, servings, image_url, extracted_by, created_at
+             FROM recipes WHERE url=?1",
+            params![url],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                ))
+            },
+        );
+        match result {
+            Ok((
+                url,
+                name,
+                ingredients_json,
+                instructions_json,
+                prep_time,
+                cook_time,
+                servings,
+                image_url,
+                extracted_by,
+                created_at,
+            )) => {
+                let ingredients: Vec<String> =
+                    serde_json::from_str(&ingredients_json).unwrap_or_default();
+                let instructions: Vec<String> =
+                    serde_json::from_str(&instructions_json).unwrap_or_default();
+                Ok(Some(StoredRecipe {
+                    url,
+                    name,
+                    ingredients,
+                    instructions,
+                    prep_time,
+                    cook_time,
+                    servings,
+                    image_url,
+                    extracted_by,
+                    created_at,
+                }))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn list_recipes(&self, limit: u32, offset: u32) -> Result<Vec<StoredRecipe>> {
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare(
+            "SELECT url, name, ingredients, instructions, prep_time, cook_time, servings, image_url, extracted_by, created_at
+             FROM recipes ORDER BY created_at DESC LIMIT ?1 OFFSET ?2",
+        )?;
+        let rows = stmt
+            .query_map(params![limit, offset], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .map(
+                |(
+                    url,
+                    name,
+                    ingredients_json,
+                    instructions_json,
+                    prep_time,
+                    cook_time,
+                    servings,
+                    image_url,
+                    extracted_by,
+                    created_at,
+                )| {
+                    let ingredients: Vec<String> =
+                        serde_json::from_str(&ingredients_json).unwrap_or_default();
+                    let instructions: Vec<String> =
+                        serde_json::from_str(&instructions_json).unwrap_or_default();
+                    StoredRecipe {
+                        url,
+                        name,
+                        ingredients,
+                        instructions,
+                        prep_time,
+                        cook_time,
+                        servings,
+                        image_url,
+                        extracted_by,
+                        created_at,
+                    }
+                },
+            )
+            .collect();
+        Ok(rows)
+    }
+
+    pub fn pages_needing_recipe_llm(&self, limit: u32) -> Result<Vec<(String, String, String)>> {
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare(
+            "SELECT url, COALESCE(title,''), COALESCE(body,'') FROM pages
+             WHERE recipe_status='pending' LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map(params![limit], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
+    /// Re-scans all fetched pages (including those previously marked 'none') for recipe
+    /// heuristic matches and marks them 'pending' for LLM extraction.
+    /// Skips domains that have many fetched pages but zero recipes (same logic as sync).
+    /// Returns the number of pages queued.
+    pub fn queue_recipe_scan(&self) -> Result<u64> {
+        let skip = self.recipe_skip_hosts(15)?;
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare(
+            "SELECT url, COALESCE(title,''), COALESCE(body,'') FROM pages
+             WHERE fetch_status='fetched' AND recipe_status IS NOT 'recipe'",
+        )?;
+        let pages: Vec<(String, String, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut queued = 0u64;
+        for (url, title, body) in pages {
+            let host_skip = crate::fetch::recipe::url_host(&url)
+                .map(|h| skip.contains(h))
+                .unwrap_or(false);
+            if host_skip {
+                continue;
+            }
+            if crate::fetch::recipe::looks_like_recipe(&title, &body) {
+                conn.execute(
+                    "UPDATE pages SET recipe_status='pending' WHERE url=?1",
+                    params![url],
+                )?;
+                queued += 1;
+            } else {
+                conn.execute(
+                    "UPDATE pages SET recipe_status='none' WHERE url=?1 AND recipe_status IS NULL",
+                    params![url],
+                )?;
+            }
+        }
+        Ok(queued)
+    }
+
+    /// Returns hosts that have >= `min_fetched` fetched pages and zero recipes.
+    /// Used to skip recipe detection for domains that never have recipes.
+    pub fn recipe_skip_hosts(&self, min_fetched: usize) -> Result<HashSet<String>> {
+        let conn = Connection::open(&self.path)?;
+        let mut stmt = conn.prepare("SELECT p.url FROM pages p WHERE p.fetch_status='fetched'")?;
+        let urls: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut host_counts: HashMap<String, usize> = HashMap::new();
+        for url in &urls {
+            if let Some(host) = crate::fetch::recipe::url_host(url) {
+                *host_counts.entry(host.to_string()).or_insert(0) += 1;
+            }
+        }
+
+        let mut stmt2 = conn.prepare("SELECT url FROM recipes")?;
+        let recipe_urls: Vec<String> = stmt2
+            .query_map([], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut hosts_with_recipes: HashSet<String> = HashSet::new();
+        for url in &recipe_urls {
+            if let Some(host) = crate::fetch::recipe::url_host(url) {
+                hosts_with_recipes.insert(host.to_string());
+            }
+        }
+
+        let skip: HashSet<String> = host_counts
+            .into_iter()
+            .filter(|(host, count)| *count >= min_fetched && !hosts_with_recipes.contains(host))
+            .map(|(host, _)| host)
+            .collect();
+        Ok(skip)
     }
 
     pub fn vector_search(

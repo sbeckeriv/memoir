@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::browser::{self, HistoryItem};
 use crate::cluster::{self, Cluster};
+use crate::fetch::recipe::{looks_like_recipe, parse_llm_recipe, recipe_extract_prompt, url_host};
 use crate::index::{DigestPage, IndexStore, PageEntry, SearchResult, Stats, WeeklyEntry};
 use crate::rag::AskResponse;
 use crate::session_log::LogKind;
@@ -870,6 +871,82 @@ pub struct DeletedCount {
     pub deleted: u64,
 }
 
+pub async fn page_viewer() -> impl IntoResponse {
+    Html(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>memoir · page viewer</title>
+<link rel="stylesheet" href="/api/custom-css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f4f6;color:#1a1a1a;min-height:100vh}
+header{background:#fff;border-bottom:1px solid #e2e2e6;padding:.875rem 1.5rem;display:flex;align-items:center;gap:1.25rem;position:sticky;top:0;z-index:10}
+header h1{flex-shrink:0;line-height:0}
+header h1 a{display:block}
+.app-icon{height:28px;width:auto;border-radius:6px}
+.header-nav{font-size:.82rem;color:#aaa;flex-shrink:0}
+.header-nav a{color:#5b8af4;text-decoration:none}
+.header-nav a:hover{text-decoration:underline}
+.header-nav-current{color:#555;font-weight:500}
+main{max-width:780px;margin:0 auto;padding:1.5rem}
+.meta{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:1rem 1.25rem;margin-bottom:1.25rem}
+.meta h2{font-size:1.05rem;font-weight:600;line-height:1.35;margin-bottom:.5rem}
+.meta-links{display:flex;gap:.75rem;flex-wrap:wrap;font-size:.82rem}
+.meta-links a{color:#5b8af4;text-decoration:none}
+.meta-links a:hover{text-decoration:underline}
+.meta-detail{font-size:.78rem;color:#888;margin-top:.4rem}
+.body-card{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.07);padding:1.25rem;white-space:pre-wrap;font-size:.875rem;line-height:1.65;color:#222;word-break:break-word}
+.loading{color:#aaa;padding:2rem;text-align:center}
+.not-found{color:#b91c1c;padding:2rem;text-align:center}
+</style>
+</head>
+<body class="page-viewer">
+<header>
+  <h1><a href="/"><img src="data:image/png;base64,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" class="app-icon" alt="memoir"></a></h1>
+  <span class="header-nav" id="main-nav"></span><script>!function(){var N=[['/','Search'],['/manage','Manage'],['/recipes','Recipes'],['/chat','Chat'],['/digest','Digest'],['/settings','Settings'],['/log','Activity']],p=location.pathname;document.getElementById('main-nav').innerHTML=N.map(function(l){var on=l[0]==='/'?p===l[0]:(p===l[0]||p.startsWith(l[0]+'/'));return on?'<span class="header-nav-current">'+l[1]+'</span>':'<a href="'+l[0]+'">'+l[1]+'</a>';}).join(' \xb7 ');}();</script>
+</header>
+<main>
+  <div id="content"><p class="loading">Loading…</p></div>
+</main>
+<script>
+(async function() {
+  const params = new URLSearchParams(location.search);
+  const url = params.get('url');
+  if (!url) { document.getElementById('content').innerHTML = '<p class="not-found">No URL specified.</p>'; return; }
+  document.title = 'memoir \xb7 ' + url;
+  const resp = await fetch('/api/page?' + new URLSearchParams({url}));
+  if (!resp.ok) { document.getElementById('content').innerHTML = '<p class="not-found">Page not found in index.</p>'; return; }
+  const page = await resp.json();
+  const recipeResp = await fetch('/api/recipes/for-url?' + new URLSearchParams({url}));
+  const hasRecipe = recipeResp.ok;
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const links = [
+    '<a href="' + esc(url) + '" target="_blank" rel="noopener">Live source ↗</a>',
+    hasRecipe ? '<a href="/recipes?url=' + encodeURIComponent(url) + '">View recipe</a>' : '',
+    '<a href="/?q=' + encodeURIComponent(url) + '">Search this page</a>',
+  ].filter(Boolean).join('<span style="color:#d0d0d8"> \xb7 </span>');
+  const detail = [
+    page.first_visit_at ? 'first visited ' + page.first_visit_at : '',
+    page.last_visit_at ? 'last visited ' + page.last_visit_at : '',
+    page.fetch_status ? 'status: ' + page.fetch_status : '',
+  ].filter(Boolean).join(' \xb7 ');
+  document.getElementById('content').innerHTML =
+    '<div class="meta">' +
+      '<h2>' + esc(page.title || url) + '</h2>' +
+      '<div class="meta-links">' + links + '</div>' +
+      (detail ? '<div class="meta-detail">' + esc(detail) + '</div>' : '') +
+    '</div>' +
+    '<div class="body-card">' + esc(page.body || '(no content stored)') + '</div>';
+})();
+</script>
+</body>
+</html>"#,
+    )
+}
+
 pub async fn list_pages(
     State(state): State<AppState>,
     Query(params): Query<ListPagesParams>,
@@ -1411,16 +1488,54 @@ pub async fn reindex_page(
             Err(_) => return,
         };
         if let crate::fetch::FetchResult::Ok(page) = fetcher.fetch(&url).await {
-            let index = state.index.clone();
-            let url2 = url.clone();
+            let recipe = page.recipe.clone();
             let title = page.title.clone();
             let body = page.body.clone();
-            if tokio::task::spawn_blocking(move || index.upsert_page(&url2, &title, &body))
+            let index = state.index.clone();
+            let url2 = url.clone();
+            let title2 = title.clone();
+            let body2 = body.clone();
+            if tokio::task::spawn_blocking(move || index.upsert_page(&url2, &title2, &body2))
                 .await
                 .is_err()
             {
                 return;
             }
+
+            // Recipe detection — mirror what sync.rs does.
+            let skip = url_host(&url)
+                .map(|h| {
+                    let idx = state.index.clone();
+                    idx.recipe_skip_hosts(15)
+                        .ok()
+                        .map(|s| s.contains(h))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+            if !skip {
+                if let Some(card) = recipe {
+                    let idx = state.index.clone();
+                    let url2 = url.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        idx.store_recipe(&url2, &card, "schema")
+                    })
+                    .await;
+                } else if looks_like_recipe(&title, &body) {
+                    let idx = state.index.clone();
+                    let url2 = url.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        idx.set_recipe_status(&url2, "pending")
+                    })
+                    .await;
+                } else {
+                    let idx = state.index.clone();
+                    let url2 = url.clone();
+                    let _ =
+                        tokio::task::spawn_blocking(move || idx.set_recipe_status(&url2, "none"))
+                            .await;
+                }
+            }
+
             if let Some(embedder) = &state.embedder {
                 let text = format!("{} {}", page.title, page.body);
                 let embedder = embedder.clone();
@@ -1963,6 +2078,129 @@ pub async fn remove_thread_page(
 ) -> impl IntoResponse {
     match state.index.remove_thread_page(id, &body.url) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+// --- Recipe handlers ---
+
+pub async fn recipes_page() -> impl IntoResponse {
+    Html(include_str!("../ui/recipes.html"))
+}
+
+#[derive(Deserialize)]
+pub struct RecipesQuery {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+pub async fn list_recipes(
+    State(state): State<AppState>,
+    Query(q): Query<RecipesQuery>,
+) -> impl IntoResponse {
+    let limit = q.limit.unwrap_or(50);
+    let offset = q.offset.unwrap_or(0);
+    match state.index.list_recipes(limit, offset) {
+        Ok(recipes) => Json(recipes).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ForUrlQuery {
+    pub url: String,
+}
+
+pub async fn get_recipe_for_url(
+    State(state): State<AppState>,
+    Query(q): Query<ForUrlQuery>,
+) -> impl IntoResponse {
+    match state.index.get_recipe(&q.url) {
+        Ok(Some(recipe)) => Json(recipe).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ExtractRecipeBody {
+    pub url: String,
+}
+
+pub async fn recipe_scan(State(state): State<AppState>) -> impl IntoResponse {
+    match state.index.queue_recipe_scan() {
+        Ok(n) => {
+            state.log.push(
+                LogKind::Sync,
+                format!("Recipe scan: {n} page(s) queued for LLM extraction"),
+                None,
+            );
+            Json(serde_json::json!({ "queued": n })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RequeueHostParams {
+    pub host: String,
+}
+
+pub async fn requeue_host(
+    State(state): State<AppState>,
+    Query(params): Query<RequeueHostParams>,
+) -> impl IntoResponse {
+    match state.index.requeue_host_for_refetch(&params.host) {
+        Ok(n) => {
+            state.log.push(
+                LogKind::Sync,
+                format!("Re-queue {}: {n} page(s) marked for re-fetch", params.host),
+                None,
+            );
+            Json(serde_json::json!({ "queued": n, "host": params.host })).into_response()
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn extract_recipe(
+    State(state): State<AppState>,
+    Json(body): Json<ExtractRecipeBody>,
+) -> impl IntoResponse {
+    let page = match state.index.get_bodies(std::slice::from_ref(&body.url)) {
+        Ok(pages) if !pages.is_empty() => pages.into_iter().next().unwrap(),
+        Ok(_) => return (StatusCode::NOT_FOUND, "Page not in index").into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+    let (url, page_body) = page;
+    let page_data = match state.index.get_page(&url) {
+        Ok(Some(p)) => p,
+        _ => serde_json::Value::Null,
+    };
+    let title = page_data
+        .get("title")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let llm = state.llm.lock().unwrap().clone();
+    let prompt = recipe_extract_prompt(&title, &page_body);
+    match llm.generate(&prompt, None).await {
+        Ok(response) => {
+            if let Some(card) = parse_llm_recipe(&response) {
+                match state.index.store_recipe(&url, &card, "llm") {
+                    Ok(()) => Json(card).into_response(),
+                    Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+                }
+            } else {
+                let _ = state.index.set_recipe_status(&url, "none");
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "No recipe found on this page",
+                )
+                    .into_response()
+            }
+        }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }

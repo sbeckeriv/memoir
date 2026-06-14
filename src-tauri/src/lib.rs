@@ -621,6 +621,7 @@ fn build_tray(
     TrayIconBuilder::new()
         .tooltip("Memoir")
         .icon(tauri::include_image!("icons/tray-icon.png"))
+        .icon_as_template(true)
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "open" => show_main_window(app, port, false),

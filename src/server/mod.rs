@@ -217,6 +217,7 @@ fn build_router(state: AppState) -> Router {
         .route("/api/digest/history", get(handlers::digest_history))
         .route("/api/stats", get(handlers::stats))
         .route("/api/favicon", get(handlers::favicon))
+        .route("/page", get(handlers::page_viewer))
         .route("/api/pages", get(handlers::list_pages))
         .route("/api/starred", get(handlers::starred))
         .route("/api/star", post(handlers::set_starred))
@@ -278,6 +279,12 @@ fn build_router(state: AppState) -> Router {
             "/api/threads/{id}/pages/remove",
             post(handlers::remove_thread_page),
         )
+        .route("/recipes", get(handlers::recipes_page))
+        .route("/api/recipes", get(handlers::list_recipes))
+        .route("/api/recipes/for-url", get(handlers::get_recipe_for_url))
+        .route("/api/recipes/extract", post(handlers::extract_recipe))
+        .route("/api/recipes/scan", post(handlers::recipe_scan))
+        .route("/api/requeue-host", post(handlers::requeue_host))
         .layer(cors)
         .with_state(state)
 }

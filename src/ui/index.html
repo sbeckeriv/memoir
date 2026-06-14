@@ -334,6 +334,25 @@ main {
 }
 .result-item.expanded .result-body-expand { display: block; }
 .icon-btn.expand.active { color: #2563eb; background: #eff4ff; border-color: #bfdbfe; }
+.result-title-row { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.recipe-slot { flex-shrink: 0; }
+.recipe-tag {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.4;
+  font-family: inherit;
+  text-decoration: none;
+  display: inline-block;
+}
+a.recipe-tag { background: #f0edff; border-color: #c4b5fd; color: #6d28d9; }
+a.recipe-tag:hover { background: #e4deff; }
+button.recipe-find { background: none; border-color: #d0d0d8; color: #888; }
+button.recipe-find:hover { background: #f8f8fb; border-color: #a5b4fc; color: #4338ca; }
+button.recipe-find:disabled { opacity: 0.5; cursor: default; }
 
 .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; align-items: start; }
 @media (max-width: 640px) { .home-grid { grid-template-columns: 1fr; } }
@@ -710,7 +729,7 @@ main {
     </div>
     <button class="btn btn-search" id="btn-search">Search</button>
   </div>
-  <span class="header-nav"><a href="/manage">Manage</a> · <a href="/chat">Chat</a> · <a href="/digest">Digest</a> · <a href="/settings">Settings</a> · <a href="/log">Activity</a></span>
+  <span class="header-nav" id="main-nav"></span><script>!function(){var N=[['/','Search'],['/manage','Manage'],['/recipes','Recipes'],['/chat','Chat'],['/digest','Digest'],['/settings','Settings'],['/log','Activity']],p=location.pathname;document.getElementById('main-nav').innerHTML=N.map(function(l){var on=l[0]==='/'?p===l[0]:(p===l[0]||p.startsWith(l[0]+'/'));return on?'<span class="header-nav-current">'+l[1]+'</span>':'<a href="'+l[0]+'">'+l[1]+'</a>';}).join(' \xb7 ');}();</script>
   <div id="update-notice" class="update-notice">
     <span id="update-version"></span>
     · <a id="update-url" href="#" target="_blank">Release notes</a>
@@ -1005,19 +1024,26 @@ function renderSearchItems(items) {
       : '';
     const starClass = i.starred ? 'starred' : '';
     const starChar = i.starred ? '★' : '☆';
+    const recipeWidget = i.has_recipe
+      ? `<a href="/recipes?url=${encodeURIComponent(i.url)}" class="recipe-tag" title="View saved recipe">🍴 recipe</a>`
+      : `<button class="recipe-tag recipe-find" title="Ask the LLM to extract a recipe from this page" onclick="findRecipe(this, '${esc(i.url)}')">🔍 find recipe</button>`;
     return `<div class="result-item" data-url="${esc(i.url)}" data-starred="${!!i.starred}">
       <div class="result-content">
-        <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title || i.url)}</a>
+        <div class="result-title-row">
+          <a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title || i.url)}</a>
+          <span class="recipe-slot">${recipeWidget}</span>
+        </div>
         <div class="snippet">${i.snippet || ''}</div>
         ${datesHtml}
         <div class="result-body-expand"></div>
       </div>
       <div class="result-actions">
-        <button class="icon-btn expand" title="View page content" onclick="toggleExpandBody(this)">▾</button>
+        <button class="icon-btn expand" title="Expand cached page content" onclick="toggleExpandBody(this)">▾</button>
+        <a class="icon-btn" href="/page?url=${esc(i.url)}" title="View local cached copy">📄</a>
         <a class="icon-btn" href="https://web.archive.org/web/*/${esc(i.url)}" target="_blank" rel="noopener" title="View on Wayback Machine">⏱</a>
-        <button class="icon-btn ${starClass}" title="${i.starred ? 'Unstar' : 'Star'}" onclick="toggleResultStar(this)">${starChar}</button>
+        <button class="icon-btn ${starClass}" title="${i.starred ? 'Remove star' : 'Star this page'}" onclick="toggleResultStar(this)">${starChar}</button>
         <div class="thread-picker-wrap">
-          <button class="icon-btn" title="Add to thread" onclick="openThreadPicker(this)">+</button>
+          <button class="icon-btn" title="Add to reading thread" onclick="openThreadPicker(this)">+</button>
           <div class="thread-popover"></div>
         </div>
         <button class="icon-btn del" title="Delete from index" onclick="deleteResult(this)">🗑</button>
@@ -1137,6 +1163,36 @@ async function toggleResultStar(btn) {
   btn.textContent = nowStarred ? '★' : '☆';
   btn.classList.toggle('starred', nowStarred);
   btn.title = nowStarred ? 'Unstar' : 'Star';
+}
+
+async function findRecipe(btn, url) {
+  btn.disabled = true;
+  btn.textContent = '⏳ extracting…';
+  try {
+    const r = await fetch('/api/recipes/extract', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (r.ok) {
+      // Recipe found — swap button for recipe link
+      const slot = btn.parentElement;
+      slot.innerHTML = `<a href="/recipes?url=${encodeURIComponent(url)}" class="recipe-tag" title="View saved recipe">🍴 recipe</a>`;
+    } else if (r.status === 422) {
+      btn.textContent = '✗ no recipe';
+      btn.title = 'No recipe found. Try re-indexing this page first if it was recently added.';
+      btn.disabled = false;
+    } else {
+      const msg = await r.text();
+      btn.textContent = '✗ error';
+      btn.title = msg;
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = '✗ error';
+    btn.title = e.message;
+    btn.disabled = false;
+  }
 }
 
 async function deleteResult(btn) {

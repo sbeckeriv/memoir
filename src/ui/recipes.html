@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>memoir · recipes</title>
+<link rel="stylesheet" href="/api/custom-css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f4f4f6;
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+header {
+  background: #fff;
+  border-bottom: 1px solid #e2e2e6;
+  padding: 0.875rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+header h1 { flex-shrink: 0; line-height: 0; }
+header h1 a { display: block; }
+.app-icon { height: 28px; width: auto; border-radius: 6px; }
+header a { color: inherit; text-decoration: none; }
+header a:hover { text-decoration: underline; }
+.header-nav { font-size: 0.82rem; color: #aaa; flex-shrink: 0; }
+.header-nav a { color: #5b8af4; text-decoration: none; }
+.header-nav a:hover { text-decoration: underline; }
+.header-nav-current { color: #555; font-weight: 500; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+
+h2 { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #888; margin: 1.5rem 0 0.6rem; }
+h2:first-child { margin-top: 0; }
+
+.card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+}
+
+/* Extract panel */
+.extract-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.875rem 1rem;
+  flex-wrap: wrap;
+}
+.extract-row label { font-size: 0.82rem; color: #555; white-space: nowrap; }
+.extract-row input {
+  flex: 1;
+  min-width: 220px;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #d0d0d8;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  outline: none;
+  background: #fafafa;
+}
+.extract-row input:focus { border-color: #5b8af4; }
+.btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: opacity 0.1s;
+  flex-shrink: 0;
+}
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: #5b8af4; color: #fff; }
+.btn-secondary { background: #e8e8ee; color: #333; }
+.extract-msg { font-size: 0.82rem; width: 100%; padding: 0 0.25rem; }
+.extract-msg.ok { color: #16a34a; }
+.extract-msg.err { color: #b91c1c; }
+
+/* Grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+/* Recipe card */
+.recipe-card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.recipe-card:hover { border-color: #5b8af4; box-shadow: 0 2px 8px rgba(91,138,244,0.15); }
+
+.card-img {
+  width: 100%;
+  height: 150px;
+  background: #f0f0f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  color: #bbb;
+  overflow: hidden;
+}
+.card-img img { width: 100%; height: 100%; object-fit: cover; }
+
+.card-body { padding: 0.875rem; flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
+
+.card-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: #1a1a1a;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.2rem; }
+.chip {
+  background: #f0f0f4;
+  border-radius: 20px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.74rem;
+  color: #666;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  border-top: 1px solid #f0f0f4;
+}
+.card-actions button, .card-actions a {
+  font-size: 0.78rem;
+  text-decoration: none;
+  color: #5b8af4;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.card-actions button:hover, .card-actions a:hover { text-decoration: underline; }
+.card-actions .sep { color: #d0d0d8; font-size: 0.78rem; }
+
+/* Modal */
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.modal-backdrop.open { display: flex; }
+
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  max-width: 600px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1.25rem 1.25rem 0;
+}
+.modal-header h3 { font-size: 1.05rem; font-weight: 600; flex: 1; line-height: 1.35; }
+.modal-close {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 1.3rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+.modal-close:hover { color: #1a1a1a; }
+
+.modal-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.75rem 1.25rem 0; }
+
+.modal-img { width: 100%; max-height: 200px; object-fit: cover; margin-top: 0.75rem; }
+
+.modal-section { padding: 1rem 1.25rem 0; }
+.modal-section h4 {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 0.5rem;
+}
+.modal-section ul { list-style: disc; padding-left: 1.25rem; }
+.modal-section ul li { font-size: 0.875rem; padding: 0.15rem 0; }
+.modal-section ol { list-style: decimal; padding-left: 1.25rem; }
+.modal-section ol li { font-size: 0.875rem; padding: 0.25rem 0; }
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid #f0f0f4;
+}
+.copy-ok { font-size: 0.8rem; color: #16a34a; display: none; }
+
+.empty { color: #aaa; text-align: center; padding: 3rem 1rem; font-size: 0.9rem; }
+
+@media (max-width: 540px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body class="page-recipes">
+
+<header>
+  <h1><a href="/"><img src="data:image/png;base64,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" class="app-icon" alt="memoir"></a></h1>
+  <span class="header-nav" id="main-nav"></span><script>!function(){var N=[['/','Search'],['/manage','Manage'],['/recipes','Recipes'],['/chat','Chat'],['/digest','Digest'],['/settings','Settings'],['/log','Activity']],p=location.pathname;document.getElementById('main-nav').innerHTML=N.map(function(l){var on=l[0]==='/'?p===l[0]:(p===l[0]||p.startsWith(l[0]+'/'));return on?'<span class="header-nav-current">'+l[1]+'</span>':'<a href="'+l[0]+'">'+l[1]+'</a>';}).join(' \xb7 ');}();</script>
+</header>
+
+<main>
+  <h2>Force extract</h2>
+  <div class="card">
+    <div class="extract-row">
+      <label for="extract-url">URL already in index</label>
+      <input type="url" id="extract-url" placeholder="https://example.com/chocolate-cake">
+      <button class="btn btn-primary" id="extract-btn">Extract</button>
+      <span class="extract-msg" id="extract-msg"></span>
+    </div>
+  </div>
+
+  <h2>Recipes <span id="recipe-count" style="font-weight:400;color:#aaa"></span></h2>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" style="display:none">No recipes yet. Visit recipe pages and they'll be detected automatically, or use the extract box above.</p>
+</main>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-name"></h3>
+      <button class="modal-close" id="modal-close">&#x2715;</button>
+    </div>
+    <div class="modal-chips" id="modal-chips"></div>
+    <img id="modal-img" class="modal-img" style="display:none" alt="">
+    <div class="modal-section" id="modal-ingredients-sec">
+      <h4>Ingredients</h4>
+      <ul id="modal-ingredients"></ul>
+    </div>
+    <div class="modal-section" id="modal-instructions-sec">
+      <h4>Instructions</h4>
+      <ol id="modal-instructions"></ol>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="modal-copy">Copy Markdown</button>
+      <a class="btn btn-secondary" id="modal-local" href="#">View Local</a>
+      <a class="btn btn-secondary" id="modal-source" href="#" target="_blank" rel="noopener">Source ↗</a>
+      <span class="copy-ok" id="copy-ok">Copied!</span>
+    </div>
+  </div>
+</div>
+
+<script>
+let recipes = [];
+let activeRecipe = null;
+
+async function loadRecipes() {
+  const resp = await fetch('/api/recipes?limit=200');
+  if (!resp.ok) { document.getElementById('empty').style.display = ''; return; }
+  recipes = await resp.json();
+  renderGrid();
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+  const count = document.getElementById('recipe-count');
+  if (!recipes.length) { empty.style.display = ''; count.textContent = ''; return; }
+  empty.style.display = 'none';
+  count.textContent = `· ${recipes.length}`;
+  grid.innerHTML = recipes.map((r, i) => cardHtml(r, i)).join('');
+  grid.querySelectorAll('.card-body').forEach(el =>
+    el.addEventListener('click', () => openModal(parseInt(el.dataset.i)))
+  );
+  grid.querySelectorAll('.copy-btn').forEach(el =>
+    el.addEventListener('click', e => { e.stopPropagation(); copyMarkdown(recipes[parseInt(el.dataset.i)]); })
+  );
+}
+
+function cardHtml(r, i) {
+  const chips = [];
+  if (r.prep_time) chips.push(`<span class="chip">prep ${esc(r.prep_time)}</span>`);
+  if (r.cook_time) chips.push(`<span class="chip">cook ${esc(r.cook_time)}</span>`);
+  if (r.servings) chips.push(`<span class="chip">${esc(r.servings)}</span>`);
+  if (r.ingredients.length) chips.push(`<span class="chip">${r.ingredients.length} ingredients</span>`);
+
+  const imgHtml = r.image_url
+    ? `<div class="card-img"><img src="${esc(r.image_url)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='🍴'"></div>`
+    : `<div class="card-img">🍴</div>`;
+
+  return `
+    <div class="recipe-card">
+      ${imgHtml}
+      <div class="card-body" data-i="${i}">
+        <div class="card-name">${esc(r.name || r.url)}</div>
+        <div class="chips">${chips.join('')}</div>
+      </div>
+      <div class="card-actions">
+        <button class="copy-btn" data-i="${i}">Copy Markdown</button>
+        <span class="sep">·</span>
+        <a href="/page?url=${encodeURIComponent(r.url)}">View Local</a>
+        <span class="sep">·</span>
+        <a href="${esc(r.url)}" target="_blank" rel="noopener">Source ↗</a>
+      </div>
+    </div>`;
+}
+
+function openModal(i) {
+  activeRecipe = recipes[i];
+  const r = activeRecipe;
+
+  document.getElementById('modal-name').textContent = r.name || r.url;
+  document.getElementById('modal-source').href = r.url;
+  document.getElementById('modal-local').href = '/page?url=' + encodeURIComponent(r.url);
+
+  const chips = [];
+  if (r.prep_time) chips.push(`<span class="chip">prep ${esc(r.prep_time)}</span>`);
+  if (r.cook_time) chips.push(`<span class="chip">cook ${esc(r.cook_time)}</span>`);
+  if (r.servings) chips.push(`<span class="chip">${esc(r.servings)}</span>`);
+  document.getElementById('modal-chips').innerHTML = chips.join('');
+
+  const img = document.getElementById('modal-img');
+  if (r.image_url) { img.src = r.image_url; img.style.display = ''; }
+  else { img.style.display = 'none'; }
+
+  const ingSec = document.getElementById('modal-ingredients-sec');
+  if (r.ingredients.length) {
+    document.getElementById('modal-ingredients').innerHTML = r.ingredients.map(s => `<li>${esc(s)}</li>`).join('');
+    ingSec.style.display = '';
+  } else { ingSec.style.display = 'none'; }
+
+  const instSec = document.getElementById('modal-instructions-sec');
+  if (r.instructions.length) {
+    document.getElementById('modal-instructions').innerHTML = r.instructions.map(s => `<li>${esc(s)}</li>`).join('');
+    instSec.style.display = '';
+  } else { instSec.style.display = 'none'; }
+
+  document.getElementById('copy-ok').style.display = 'none';
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+  activeRecipe = null;
+}
+
+function toMarkdown(r) {
+  const lines = [`# ${r.name || 'Recipe'}`, ''];
+  if (r.prep_time) lines.push(`**Prep time:** ${r.prep_time}`);
+  if (r.cook_time) lines.push(`**Cook time:** ${r.cook_time}`);
+  if (r.servings) lines.push(`**Servings:** ${r.servings}`);
+  if (r.prep_time || r.cook_time || r.servings) lines.push('');
+  if (r.ingredients.length) {
+    lines.push('## Ingredients');
+    r.ingredients.forEach(s => lines.push(`- ${s}`));
+    lines.push('');
+  }
+  if (r.instructions.length) {
+    lines.push('## Instructions');
+    r.instructions.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    lines.push('');
+  }
+  lines.push(`Source: ${r.url}`);
+  return lines.join('\n');
+}
+
+function copyMarkdown(r) {
+  navigator.clipboard.writeText(toMarkdown(r));
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-backdrop')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.getElementById('modal-copy').addEventListener('click', () => {
+  if (activeRecipe) copyMarkdown(activeRecipe);
+  const ok = document.getElementById('copy-ok');
+  ok.style.display = '';
+  setTimeout(() => ok.style.display = 'none', 2000);
+});
+
+document.getElementById('extract-btn').addEventListener('click', async () => {
+  const url = document.getElementById('extract-url').value.trim();
+  const msg = document.getElementById('extract-msg');
+  if (!url) { msg.textContent = 'Enter a URL first.'; msg.className = 'extract-msg err'; return; }
+  msg.textContent = 'Extracting…'; msg.className = 'extract-msg';
+  try {
+    const resp = await fetch('/api/recipes/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (resp.ok) {
+      const card = await resp.json();
+      msg.textContent = `Found: "${card.name || 'recipe'}"`;
+      msg.className = 'extract-msg ok';
+      document.getElementById('extract-url').value = '';
+      await loadRecipes();
+    } else {
+      msg.textContent = (await resp.text()) || 'No recipe found.';
+      msg.className = 'extract-msg err';
+    }
+  } catch (e) {
+    msg.textContent = 'Request failed.';
+    msg.className = 'extract-msg err';
+  }
+});
+
+loadRecipes().then(() => {
+  const urlParam = new URLSearchParams(location.search).get('url');
+  if (urlParam) {
+    const idx = recipes.findIndex(r => r.url === urlParam);
+    if (idx >= 0) openModal(idx);
+  }
+});
+</script>
+</body>
+</html>

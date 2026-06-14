@@ -1,16 +1,33 @@
 use scraper::{Html, Selector};
 
+use crate::recipe::RecipeCard;
+
 #[derive(Debug)]
 pub struct ExtractedPage {
     pub title: String,
     pub body: String,
+    pub recipe: Option<RecipeCard>,
 }
 
 pub fn extract(html: &str) -> ExtractedPage {
     let doc = Html::parse_document(html);
+    let title = extract_title(&doc);
+    let body = {
+        let text = extract_body(&doc);
+        if text.len() >= 200 {
+            text
+        } else {
+            // Sparse visible text — page is probably JS-rendered. Pull content from
+            // embedded JSON data ("shortDescription" is YouTube's pattern) or meta tags.
+            extract_json_field(html, "shortDescription")
+                .or_else(|| meta_description(&doc))
+                .unwrap_or(text)
+        }
+    };
     ExtractedPage {
-        title: extract_title(&doc),
-        body: extract_body(&doc),
+        title,
+        body,
+        recipe: None,
     }
 }
 
@@ -50,6 +67,64 @@ fn extract_body(doc: &Html) -> String {
         }
     }
     String::new()
+}
+
+fn meta_description(doc: &Html) -> Option<String> {
+    for sel_str in &[
+        r#"meta[property="og:description"]"#,
+        r#"meta[name="description"]"#,
+    ] {
+        if let Ok(sel) = Selector::parse(sel_str)
+            && let Some(el) = doc.select(&sel).next()
+            && let Some(content) = el.value().attr("content")
+        {
+            let s = content.trim().to_string();
+            if !s.is_empty() {
+                return Some(s);
+            }
+        }
+    }
+    None
+}
+
+/// Extracts the value of a JSON string field from raw HTML (e.g. YouTube's `"shortDescription":"..."`).
+/// Handles `\n`, `\t`, `\r`, `\\`, `\"`, and `\uXXXX` escapes.
+fn extract_json_field(html: &str, field: &str) -> Option<String> {
+    let needle = format!("\"{}\":\"", field);
+    let start = html.find(&needle)? + needle.len();
+    let rest = &html[start..];
+    let mut chars = rest.char_indices();
+    let mut value = String::new();
+    loop {
+        let (_, ch) = chars.next()?;
+        match ch {
+            '\\' => match chars.next()?.1 {
+                'n' => value.push('\n'),
+                't' => value.push('\t'),
+                'r' => value.push('\r'),
+                '"' => value.push('"'),
+                '\\' => value.push('\\'),
+                'u' => {
+                    let hex: String = (0..4)
+                        .filter_map(|_| chars.next())
+                        .map(|(_, c)| c)
+                        .collect();
+                    if let Ok(n) = u32::from_str_radix(&hex, 16)
+                        && let Some(c) = char::from_u32(n)
+                    {
+                        value.push(c);
+                    }
+                }
+                other => {
+                    value.push('\\');
+                    value.push(other);
+                }
+            },
+            '"' => break,
+            other => value.push(other),
+        }
+    }
+    if value.len() > 20 { Some(value) } else { None }
 }
 
 /// Detects login walls: redirected to a login URL or page contains a password field.

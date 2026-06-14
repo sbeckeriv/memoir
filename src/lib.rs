@@ -6,6 +6,7 @@ pub mod fetch;
 pub mod index;
 pub mod mcp;
 pub mod rag;
+pub mod recipe;
 pub mod server;
 pub mod session_log;
 pub mod sync;
