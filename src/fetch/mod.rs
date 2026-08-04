@@ -74,10 +74,9 @@ impl Fetcher {
     pub async fn fetch_favicon(&self, page_url: &str) -> Option<(String, String, Vec<u8>)> {
         let (scheme, rest) = if let Some(r) = page_url.strip_prefix("https://") {
             ("https", r)
-        } else if let Some(r) = page_url.strip_prefix("http://") {
-            ("http", r)
         } else {
-            return None;
+            let r = page_url.strip_prefix("http://")?;
+            ("http", r)
         };
         let authority_end = rest.find('/').unwrap_or(rest.len());
         let authority = &rest[..authority_end];

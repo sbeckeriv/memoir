@@ -198,7 +198,7 @@ impl Default for ApplicationSettings {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 8734,
+            port: 0,
             ui_poll_secs: 30,
             custom_css: String::new(),
             hotkey: "CmdOrCtrl+Shift+Space".to_string(),
@@ -385,10 +385,6 @@ impl Settings {
 
         if self.fetch.max_retries == 0 {
             errors.push("fetch max_retries cannot be zero".to_string());
-        }
-
-        if self.application.port == 0 {
-            errors.push("application port cannot be zero".to_string());
         }
 
         if errors.is_empty() {
@@ -631,10 +627,10 @@ mod tests {
     }
 
     #[test]
-    fn zero_port_fails_validation() {
+    fn zero_port_passes_validation() {
         let mut settings = Settings::default();
         settings.application.port = 0;
-        assert!(settings.validate().is_err());
+        assert!(settings.validate().is_ok());
     }
 
     #[test]

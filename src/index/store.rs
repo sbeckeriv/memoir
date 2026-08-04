@@ -1709,7 +1709,7 @@ mod tests {
 
     #[test]
     fn embed_roundtrip() {
-        let orig = vec![1.0f32, -0.5, 3.14];
+        let orig = vec![1.0f32, -0.5, 2.71];
         let bytes = embed_to_bytes(&orig);
         let back = bytes_to_vec(&bytes);
         for (a, b) in orig.iter().zip(&back) {
